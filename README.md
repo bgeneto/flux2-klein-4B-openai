@@ -258,10 +258,20 @@ GET /v1/models
     {
       "id": "flux-klein-4b",
       "object": "model",
-      "owned_by": "local"
+      "created": 1714867200,
+      "owned_by": "local",
+      "permission": [],
+      "root": "flux-klein-4b",
+      "parent": null
     }
   ]
 }
+```
+
+Single-model lookup is also available:
+
+```
+GET /v1/models/flux-klein-4b
 ```
 
 ### Health Checks

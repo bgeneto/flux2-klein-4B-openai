@@ -166,6 +166,21 @@ class ImageGenerationResponse(BaseModel):
     data: list[ImageData]
 
 
+class ModelCard(BaseModel):
+    id: str
+    object: Literal["model"] = "model"
+    created: int
+    owned_by: str
+    permission: list[dict[str, Any]] = Field(default_factory=list)
+    root: str
+    parent: Optional[str] = None
+
+
+class ModelListResponse(BaseModel):
+    object: Literal["list"] = "list"
+    data: list[ModelCard]
+
+
 class JobResponse(BaseModel):
     id: str
     status: JobStatus
@@ -220,6 +235,22 @@ def parse_size(size: str) -> tuple[int, int]:
 
 def iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() if dt else None
+
+
+def build_model_card() -> ModelCard:
+    created = int(time.time())
+    try:
+        created = int(settings.model_path.stat().st_mtime)
+    except OSError:
+        pass
+
+    return ModelCard(
+        id=settings.model_id,
+        created=created,
+        owned_by="local",
+        root=settings.model_id,
+        parent=None,
+    )
 
 
 def sd_server_base_url() -> str:
@@ -883,21 +914,24 @@ async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.get("/v1/models", dependencies=[Depends(verify_api_key)])
-async def list_models():
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": settings.model_id,
-                "object": "model",
-                "owned_by": "local",
-                "paths": {
-                    name: str(path) for name, path in required_asset_paths().items()
-                },
-            }
-        ],
-    }
+@app.get(
+    "/v1/models",
+    response_model=ModelListResponse,
+    dependencies=[Depends(verify_api_key)],
+)
+async def list_models() -> ModelListResponse:
+    return ModelListResponse(data=[build_model_card()])
+
+
+@app.get(
+    "/v1/models/{model_id}",
+    response_model=ModelCard,
+    dependencies=[Depends(verify_api_key)],
+)
+async def get_model(model_id: str) -> ModelCard:
+    if model_id != settings.model_id:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return build_model_card()
 
 
 @app.get(
