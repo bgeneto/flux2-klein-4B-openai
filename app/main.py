@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import logging
 import os
 import re
@@ -13,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -44,6 +46,10 @@ class Settings(BaseSettings):
 
     output_dir: Path = Path("/data/outputs")
     public_base_url: str = "http://localhost:8000"
+    sd_server_listen_ip: str = "127.0.0.1"
+    sd_server_port: int = 1234
+    sd_server_start_timeout_seconds: int = 120
+    sd_server_poll_interval_seconds: float = 0.5
 
     max_concurrent_jobs: int = 1
     queue_maxsize: int = 16
@@ -182,6 +188,7 @@ class JobRecord:
     result: Optional[dict[str, Any]] = None
     future: asyncio.Future = field(default_factory=asyncio.Future)
     work_dir: Optional[Path] = None
+    backend_job_id: Optional[str] = None
 
 
 # ----------------------------
@@ -213,6 +220,65 @@ def parse_size(size: str) -> tuple[int, int]:
 
 def iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() if dt else None
+
+
+def sd_server_base_url() -> str:
+    host = settings.sd_server_listen_ip
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+    return f"http://{host}:{settings.sd_server_port}"
+
+
+def summarize_backend_error(payload: Any) -> str:
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        message = payload.get("message")
+        if isinstance(error, dict):
+            code = error.get("code")
+            backend_message = error.get("message")
+            if code and backend_message:
+                return f"{code}: {backend_message}"
+            if backend_message:
+                return str(backend_message)
+        if error and message:
+            return f"{error}: {message}"
+        if error:
+            return str(error)
+        if message:
+            return str(message)
+    if isinstance(payload, (dict, list)):
+        return json.dumps(payload)
+    return str(payload)
+
+
+def build_backend_img_gen_payload(
+    image_request: ImageGenerationRequest, width: int, height: int
+) -> dict[str, Any]:
+    guidance: dict[str, Any] = {"txt_cfg": image_request.effective_cfg_scale()}
+    effective_guidance = (
+        image_request.guidance
+        if image_request.guidance is not None
+        else settings.default_guidance
+    )
+    if effective_guidance is not None:
+        guidance["distilled_guidance"] = effective_guidance
+
+    return {
+        "prompt": image_request.prompt,
+        "negative_prompt": image_request.negative_prompt,
+        "width": width,
+        "height": height,
+        "seed": image_request.seed,
+        "batch_count": image_request.n,
+        "embed_image_metadata": not settings.disable_image_metadata,
+        "sample_params": {
+            "sample_method": image_request.effective_sampler(),
+            "sample_steps": image_request.effective_steps(),
+            "guidance": guidance,
+        },
+        "output_format": "png",
+        "output_compression": 100,
+    }
 
 
 def abs_file_url(request: Request, relative_path: str) -> str:
@@ -267,6 +333,190 @@ def missing_required_assets() -> dict[str, str]:
 # ----------------------------
 
 
+class SDServerManager:
+    def __init__(self) -> None:
+        self.process: Optional[asyncio.subprocess.Process] = None
+        self.client: Optional[httpx.AsyncClient] = None
+
+    def _build_command(self) -> list[str]:
+        cmd = [
+            "sd-server",
+            "--listen-ip",
+            settings.sd_server_listen_ip,
+            "--listen-port",
+            str(settings.sd_server_port),
+            "--diffusion-model",
+            str(settings.model_path),
+            "--llm",
+            str(settings.llm_path),
+            "--steps",
+            str(settings.default_steps),
+            "--cfg-scale",
+            str(settings.default_cfg_scale),
+            "--sampling-method",
+            settings.default_sampler,
+            "--rng",
+            settings.default_rng,
+        ]
+
+        if decoder_mode() == "taesd":
+            cmd.extend(["--taesd", str(settings.taesd_path)])
+        else:
+            cmd.extend(["--vae", str(settings.vae_path)])
+
+        if settings.default_guidance is not None:
+            cmd.extend(["--guidance", str(settings.default_guidance)])
+
+        if settings.default_threads and settings.default_threads > 0:
+            cmd.extend(["-t", str(settings.default_threads)])
+
+        if settings.enable_offload_to_cpu:
+            cmd.append("--offload-to-cpu")
+
+        if settings.enable_diffusion_fa:
+            cmd.append("--diffusion-fa")
+
+        if settings.enable_mmap:
+            cmd.append("--mmap")
+
+        if settings.disable_image_metadata:
+            cmd.append("--disable-image-metadata")
+
+        if logger.isEnabledFor(logging.DEBUG):
+            cmd.append("-v")
+
+        return cmd
+
+    def _ensure_client(self) -> httpx.AsyncClient:
+        if self.client is None:
+            self.client = httpx.AsyncClient(
+                base_url=sd_server_base_url(),
+                timeout=httpx.Timeout(10.0, connect=5.0),
+            )
+        return self.client
+
+    def _ensure_running(self) -> None:
+        if self.process is None:
+            raise RuntimeError("sd-server has not been started")
+        if self.process.returncode is not None:
+            raise RuntimeError(f"sd-server exited with code {self.process.returncode}")
+
+    @staticmethod
+    def _parse_response_payload(response: httpx.Response) -> Any:
+        try:
+            return response.json()
+        except ValueError:
+            return response.text.strip() or {"error": f"HTTP {response.status_code}"}
+
+    async def start(self) -> None:
+        if self.process is not None and self.process.returncode is None:
+            return
+
+        self._ensure_client()
+        cmd = self._build_command()
+        logger.info("Starting sd-server: %s", " ".join(cmd))
+        self.process = await asyncio.create_subprocess_exec(
+            *cmd,
+            start_new_session=True,
+        )
+        try:
+            await self.wait_until_ready()
+        except Exception:
+            await self.stop()
+            raise
+
+    async def stop(self) -> None:
+        if self.client is not None:
+            await self.client.aclose()
+            self.client = None
+
+        if self.process is None:
+            return
+
+        if self.process.returncode is None:
+            try:
+                os.killpg(self.process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+            try:
+                await asyncio.wait_for(self.process.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                try:
+                    os.killpg(self.process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                await self.process.wait()
+
+        self.process = None
+
+    async def wait_until_ready(self) -> dict[str, Any]:
+        client = self._ensure_client()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + settings.sd_server_start_timeout_seconds
+        last_error = "unknown startup error"
+
+        while loop.time() < deadline:
+            self._ensure_running()
+            try:
+                response = await client.get("/sdcpp/v1/capabilities")
+                payload = self._parse_response_payload(response)
+                if response.status_code == 200 and isinstance(payload, dict):
+                    return payload
+                last_error = summarize_backend_error(payload)
+            except Exception as exc:
+                last_error = str(exc)
+                if self.process is not None and self.process.returncode is not None:
+                    raise RuntimeError(last_error) from exc
+
+            await asyncio.sleep(0.5)
+
+        raise RuntimeError(
+            "sd-server did not become ready within "
+            f"{settings.sd_server_start_timeout_seconds}s: {last_error}"
+        )
+
+    async def capabilities(self) -> dict[str, Any]:
+        self._ensure_running()
+        response = await self._ensure_client().get("/sdcpp/v1/capabilities")
+        payload = self._parse_response_payload(response)
+        if response.status_code != 200 or not isinstance(payload, dict):
+            raise RuntimeError(
+                f"sd-server capabilities failed ({response.status_code}): "
+                f"{summarize_backend_error(payload)}"
+            )
+        return payload
+
+    async def submit_img_job(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_running()
+        response = await self._ensure_client().post("/sdcpp/v1/img_gen", json=payload)
+        response_payload = self._parse_response_payload(response)
+        if response.status_code != 202 or not isinstance(response_payload, dict):
+            raise RuntimeError(
+                f"sd-server job submission failed ({response.status_code}): "
+                f"{summarize_backend_error(response_payload)}"
+            )
+        return response_payload
+
+    async def get_job(self, backend_job_id: str) -> dict[str, Any]:
+        self._ensure_running()
+        response = await self._ensure_client().get(f"/sdcpp/v1/jobs/{backend_job_id}")
+        payload = self._parse_response_payload(response)
+        if response.status_code != 200 or not isinstance(payload, dict):
+            raise RuntimeError(
+                f"sd-server job lookup failed ({response.status_code}): "
+                f"{summarize_backend_error(payload)}"
+            )
+        return payload
+
+    async def cancel_job(self, backend_job_id: str) -> tuple[int, Any]:
+        self._ensure_running()
+        response = await self._ensure_client().post(
+            f"/sdcpp/v1/jobs/{backend_job_id}/cancel"
+        )
+        return response.status_code, self._parse_response_payload(response)
+
+
 class JobManager:
     def __init__(self) -> None:
         self.queue: asyncio.Queue[JobRecord] = asyncio.Queue(
@@ -275,7 +525,6 @@ class JobManager:
         self.jobs: dict[str, JobRecord] = {}
         self.workers: list[asyncio.Task] = []
         self.cleanup_task: Optional[asyncio.Task] = None
-        self.active_processes: dict[str, asyncio.subprocess.Process] = {}
         self._shutdown = False
 
     async def start(self) -> None:
@@ -288,12 +537,6 @@ class JobManager:
 
     async def stop(self) -> None:
         self._shutdown = True
-
-        for job_id, proc in list(self.active_processes.items()):
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except Exception:
-                pass
 
         for task in self.workers:
             task.cancel()
@@ -318,6 +561,14 @@ class JobManager:
         logger.info("Queued job=%s", job.id)
         return job
 
+    @staticmethod
+    def _mark_cancelled(job: JobRecord, error: str) -> None:
+        job.status = JobStatus.CANCELLED
+        job.completed_at = datetime.now(timezone.utc)
+        job.error = error
+        if not job.future.done():
+            job.future.cancel()
+
     async def cancel(self, job_id: str) -> JobRecord:
         job = self.jobs.get(job_id)
         if not job:
@@ -326,26 +577,32 @@ class JobManager:
         if job.status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED}:
             return job
 
-        if job.status == JobStatus.RUNNING and job_id in self.active_processes:
-            proc = self.active_processes[job_id]
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-            job.status = JobStatus.CANCELLED
-            job.completed_at = datetime.now(timezone.utc)
-            job.error = "Cancelled by user"
-            if not job.future.done():
-                job.future.cancel()
-            JOB_COUNTER.labels(status="cancelled").inc()
-            return job
+        if job.status == JobStatus.RUNNING:
+            if job.backend_job_id is None:
+                self._mark_cancelled(job, "Cancelled by user")
+                JOB_COUNTER.labels(status="cancelled").inc()
+                return job
+
+            status_code, payload = await sd_server.cancel_job(job.backend_job_id)
+            if status_code == 200:
+                self._mark_cancelled(job, "Cancelled by user")
+                JOB_COUNTER.labels(status="cancelled").inc()
+                return job
+            if status_code == 409:
+                raise HTTPException(
+                    status_code=409,
+                    detail=summarize_backend_error(payload),
+                )
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "sd-server cancellation failed: "
+                    f"{summarize_backend_error(payload)}"
+                ),
+            )
 
         if job.status == JobStatus.QUEUED:
-            job.status = JobStatus.CANCELLED
-            job.completed_at = datetime.now(timezone.utc)
-            job.error = "Cancelled by user"
-            if not job.future.done():
-                job.future.cancel()
+            self._mark_cancelled(job, "Cancelled by user")
             JOB_COUNTER.labels(status="cancelled").inc()
 
         return job
@@ -388,116 +645,40 @@ class JobManager:
                 logger.exception("Job=%s failed", job.id)
             finally:
                 job.completed_at = datetime.now(timezone.utc)
-                self.active_processes.pop(job.id, None)
                 RUNNING_JOBS.dec()
                 JOB_DURATION.observe(time.perf_counter() - start_ts)
                 self.queue.task_done()
 
-    async def _run_job(self, job: JobRecord) -> dict[str, Any]:
-        req = job.request
-        width, height = parse_size(req.size)
+    def _store_backend_result(
+        self, job: JobRecord, backend_job: dict[str, Any]
+    ) -> dict[str, Any]:
+        result = backend_job.get("result") or {}
+        images = result.get("images") or []
+        output_format = result.get("output_format") or "png"
 
-        output_pattern = str(job.work_dir / "image_%03d.png")
-        seed = req.seed if req.seed is not None else -1
+        if not images:
+            raise RuntimeError("sd-server completed without images")
 
-        cmd = [
-            "sd-cli",
-            "--diffusion-model",
-            str(settings.model_path),
-            "--llm",
-            str(settings.llm_path),
-            "-p",
-            req.prompt,
-            "-n",
-            req.negative_prompt,
-            "-o",
-            output_pattern,
-            "-W",
-            str(width),
-            "-H",
-            str(height),
-            "--steps",
-            str(req.effective_steps()),
-            "--cfg-scale",
-            str(req.effective_cfg_scale()),
-            "-s",
-            str(seed),
-            "-b",
-            str(req.n),
-            "--sampling-method",
-            req.effective_sampler(),
-            "--rng",
-            settings.default_rng,
-        ]
-
-        if decoder_mode() == "taesd":
-            cmd.extend(["--taesd", str(settings.taesd_path)])
-        else:
-            cmd.extend(["--vae", str(settings.vae_path)])
-
-        if req.guidance is not None:
-            cmd.extend(["--guidance", str(req.guidance)])
-        elif settings.default_guidance is not None:
-            cmd.extend(["--guidance", str(settings.default_guidance)])
-
-        if settings.default_threads and settings.default_threads > 0:
-            cmd.extend(["-t", str(settings.default_threads)])
-
-        if settings.enable_offload_to_cpu:
-            cmd.append("--offload-to-cpu")
-
-        if settings.enable_diffusion_fa:
-            cmd.append("--diffusion-fa")
-
-        if settings.enable_mmap:
-            cmd.append("--mmap")
-
-        if settings.disable_image_metadata:
-            cmd.append("--disable-image-metadata")
-
-        logger.info("Job=%s command=%s", job.id, " ".join(cmd))
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(job.work_dir),
-            start_new_session=True,
-        )
-        self.active_processes[job.id] = proc
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(),
-                timeout=settings.job_timeout_seconds,
-            )
-        except asyncio.TimeoutError:
+        files: list[Path] = []
+        for index, image in enumerate(images, start=1):
+            b64_data = image.get("b64_json")
+            if not b64_data:
+                continue
+            file_path = job.work_dir / f"image_{index:03d}.{output_format}"
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except Exception:
-                pass
-            raise RuntimeError(f"Job timed out after {settings.job_timeout_seconds}s")
-
-        if job.status == JobStatus.CANCELLED:
-            raise asyncio.CancelledError()
-
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"sd-cli exited with code {proc.returncode}\n"
-                f"stderr:\n{tail(stderr)}\n"
-                f"stdout:\n{tail(stdout)}"
-            )
-
-        files = sorted(job.work_dir.glob("image_*.png"))
-        if not files:
-            # fallback if a single image is produced differently
-            files = sorted(job.work_dir.glob("*.png"))
+                file_path.write_bytes(base64.b64decode(b64_data))
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to decode generated image #{index}: {exc}"
+                ) from exc
+            files.append(file_path)
 
         if not files:
-            raise RuntimeError("No output image was produced")
+            raise RuntimeError("sd-server returned no decodable image outputs")
 
+        req = job.request
         relative_files = [
-            str(p.relative_to(settings.output_dir).as_posix()) for p in files
+            str(path.relative_to(settings.output_dir).as_posix()) for path in files
         ]
 
         return {
@@ -505,14 +686,90 @@ class JobManager:
             "files": relative_files,
             "meta": {
                 "job_id": job.id,
+                "backend_job_id": job.backend_job_id,
                 "steps": req.effective_steps(),
                 "cfg_scale": req.effective_cfg_scale(),
                 "sampling_method": req.effective_sampler(),
-                "seed": seed,
+                "seed": req.seed,
                 "n": req.n,
                 "size": req.size,
+                "output_format": output_format,
             },
         }
+
+    async def _run_job(self, job: JobRecord) -> dict[str, Any]:
+        if job.status == JobStatus.CANCELLED:
+            raise asyncio.CancelledError()
+
+        req = job.request
+        width, height = parse_size(req.size)
+        backend_request = build_backend_img_gen_payload(req, width, height)
+        submission = await sd_server.submit_img_job(backend_request)
+        job.backend_job_id = submission.get("id")
+
+        if not job.backend_job_id:
+            raise RuntimeError("sd-server did not return a job id")
+
+        if job.status == JobStatus.CANCELLED:
+            status_code, payload = await sd_server.cancel_job(job.backend_job_id)
+            if status_code == 409:
+                logger.warning(
+                    "Cancelled local job=%s after backend job=%s had already started: %s",
+                    job.id,
+                    job.backend_job_id,
+                    summarize_backend_error(payload),
+                )
+            raise asyncio.CancelledError()
+
+        logger.info(
+            "Job=%s delegated to sd-server job=%s",
+            job.id,
+            job.backend_job_id,
+        )
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + settings.job_timeout_seconds
+
+        while True:
+            if job.status == JobStatus.CANCELLED:
+                raise asyncio.CancelledError()
+
+            if loop.time() >= deadline:
+                try:
+                    status_code, payload = await sd_server.cancel_job(job.backend_job_id)
+                    if status_code == 409:
+                        logger.warning(
+                            "Timed out job=%s while backend job=%s was already generating: %s",
+                            job.id,
+                            job.backend_job_id,
+                            summarize_backend_error(payload),
+                        )
+                except Exception:
+                    logger.exception(
+                        "Failed to cancel timed out backend job=%s",
+                        job.backend_job_id,
+                    )
+                raise RuntimeError(
+                    f"Job timed out after {settings.job_timeout_seconds}s"
+                )
+
+            backend_job = await sd_server.get_job(job.backend_job_id)
+            backend_status = backend_job.get("status")
+
+            if backend_status == "completed":
+                return self._store_backend_result(job, backend_job)
+            if backend_status == "failed":
+                raise RuntimeError(
+                    summarize_backend_error(backend_job.get("error") or backend_job)
+                )
+            if backend_status == "cancelled":
+                raise asyncio.CancelledError()
+            if backend_status not in {"queued", "generating"}:
+                raise RuntimeError(
+                    f"Unexpected sd-server job status '{backend_status}'"
+                )
+
+            await asyncio.sleep(settings.sd_server_poll_interval_seconds)
 
     async def cleanup_loop(self) -> None:
         while True:
@@ -529,6 +786,7 @@ class JobManager:
                 logger.exception("Cleanup loop failed")
 
 
+sd_server = SDServerManager()
 manager = JobManager()
 
 
@@ -548,24 +806,15 @@ async def startup_event() -> None:
         details = ", ".join(f"{name}={path}" for name, path in missing.items())
         raise RuntimeError(f"Missing model file(s): {details}")
 
-    # Verify the binary is callable
-    proc = await asyncio.create_subprocess_exec(
-        "sd-cli",
-        "--help",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    await proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError("sd-cli is not working")
-
+    await sd_server.start()
     await manager.start()
-    logger.info("Startup complete")
+    logger.info("Startup complete; backend=%s", sd_server_base_url())
 
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     await manager.stop()
+    await sd_server.stop()
     logger.info("Shutdown complete")
 
 
@@ -604,10 +853,26 @@ async def health_ready():
                 "missing": missing,
             },
         )
+
+    try:
+        capabilities = await sd_server.capabilities()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "sd-server is not ready",
+                "error": str(exc),
+            },
+        ) from exc
+
     return {
         "status": "ready",
         "model_id": settings.model_id,
         "assets": {name: str(path) for name, path in required_asset_paths().items()},
+        "backend": {
+            "url": sd_server_base_url(),
+            "model": capabilities.get("model"),
+        },
         "queue_depth": manager.queue.qsize(),
         "max_concurrent_jobs": settings.max_concurrent_jobs,
     }
