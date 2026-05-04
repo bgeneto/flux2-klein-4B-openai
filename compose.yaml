@@ -5,9 +5,10 @@ services:
       args:
         CUDA_VERSION: "12.6.3"
         UBUNTU_VERSION: "24.04"
+        APT_MIRROR: ${APT_MIRROR:-https://ubuntu.c3sl.ufpr.br/ubuntu/}
         # Pin this in production to a tested commit or tag:
         SD_CPP_REF: "master"
-    container_name: flux-api
+    container_name: flux2-klein-api
     restart: unless-stopped
 
     ports:

@@ -70,6 +70,14 @@ Edit `.env` to configure your environment. Key settings:
 | `ENABLE_DIFFUSION_FA` | Enable diffusion flash attention | `true` |
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
 
+Build-time apt mirror override:
+
+| Variable | Description | Default |
+|---|---|---|
+| `APT_MIRROR` | Ubuntu package mirror used during Docker build | `https://ubuntu.c3sl.ufpr.br/ubuntu/` |
+
+`docker compose` reads `APT_MIRROR` from `.env`, so the normal flow is to keep it in `.env.example`, copy that file to `.env`, and edit the value there as needed.
+
 ### 2. Place Model Files
 
 Place your model files in the `models/` directory:
@@ -89,7 +97,16 @@ docker compose up --build
 
 # Or run in detached mode
 docker compose up -d --build
+
+# Or set APT_MIRROR in .env and build normally
+docker compose build
 ```
+
+Build caching notes:
+
+- The Docker build excludes `models/` and `data/` from the build context via `.dockerignore`, so large local assets no longer slow every rebuild.
+- Native compilation uses `ccache` and Python dependencies use a persistent `pip` cache through BuildKit cache mounts.
+- The expensive `stable-diffusion.cpp` build stage is isolated from application code changes, so editing `app/` should typically only rebuild the final runtime layers.
 
 ### 4. Verify
 
