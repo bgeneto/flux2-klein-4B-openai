@@ -770,7 +770,9 @@ class JobManager:
 
             if loop.time() >= deadline:
                 try:
-                    status_code, payload = await sd_server.cancel_job(job.backend_job_id)
+                    status_code, payload = await sd_server.cancel_job(
+                        job.backend_job_id
+                    )
                     if status_code == 409:
                         logger.warning(
                             "Timed out job=%s while backend job=%s was already generating: %s",
