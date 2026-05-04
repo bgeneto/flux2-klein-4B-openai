@@ -1,0 +1,60 @@
+services:
+  flux-api:
+    build:
+      context: .
+      args:
+        CUDA_VERSION: "12.6.3"
+        UBUNTU_VERSION: "24.04"
+        # Pin this in production to a tested commit or tag:
+        SD_CPP_REF: "master"
+    container_name: flux-api
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    gpus: all
+    ipc: host
+    shm_size: "16gb"
+    init: true
+    stop_grace_period: 30s
+
+    environment:
+      API_KEY: ${API_KEY:-sk-local}
+      MODEL_ID: ${MODEL_ID:-flux-klein-4b}
+      MODEL_PATH: ${MODEL_PATH:-/models/flux-2-klein-4b-Q4_K_M.gguf}
+      VAE_PATH: ${VAE_PATH:-/models/flux2_ae.safetensors}
+      LLM_PATH: ${LLM_PATH:-/models/qwen_3_4b.safetensors}
+
+      OUTPUT_DIR: ${OUTPUT_DIR:-/data/outputs}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-1}
+      QUEUE_MAXSIZE: ${QUEUE_MAXSIZE:-16}
+      JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-1800}
+      RETENTION_HOURS: ${RETENTION_HOURS:-72}
+
+      DEFAULT_STEPS: ${DEFAULT_STEPS:-4}
+      DEFAULT_CFG_SCALE: ${DEFAULT_CFG_SCALE:-1.0}
+      DEFAULT_SAMPLER: ${DEFAULT_SAMPLER:-euler}
+      DEFAULT_RNG: ${DEFAULT_RNG:-cuda}
+      DEFAULT_GUIDANCE: ${DEFAULT_GUIDANCE:-}
+      DEFAULT_THREADS: ${DEFAULT_THREADS:-0}
+
+      ENABLE_OFFLOAD_TO_CPU: ${ENABLE_OFFLOAD_TO_CPU:-true}
+      ENABLE_DIFFUSION_FA: ${ENABLE_DIFFUSION_FA:-true}
+      ENABLE_MMAP: ${ENABLE_MMAP:-false}
+      DISABLE_IMAGE_METADATA: ${DISABLE_IMAGE_METADATA:-false}
+
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+    volumes:
+      - ./models:/models:ro
+      - ./data:/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
