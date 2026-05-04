@@ -61,6 +61,7 @@ Edit `.env` to configure your environment. Key settings:
 | `TAESD_PATH` | Optional path to a compatible tiny decoder used through `--taesd` | empty |
 | `LLM_PATH` | Path to the Qwen3 4B GGUF file | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
 | `OUTPUT_DIR` | Directory for generated images | `/data/outputs` |
+| `PUBLIC_BASE_URL` | External origin for generated `/files/...` URLs when behind a reverse proxy | empty |
 | `SD_SERVER_LISTEN_IP` | Internal bind address for the managed `sd-server` | `127.0.0.1` |
 | `SD_SERVER_PORT` | Internal port for the managed `sd-server` | `1234` |
 | `SD_SERVER_START_TIMEOUT_SECONDS` | Startup wait time for backend readiness | `120` |
@@ -83,6 +84,8 @@ Build-time apt mirror override:
 | `APT_MIRROR` | Ubuntu package mirror used during Docker build | `https://ubuntu.c3sl.ufpr.br/ubuntu/` |
 
 `docker compose` reads `APT_MIRROR` from `.env`, so the normal flow is to keep it in `.env.example`, copy that file to `.env`, and edit the value there as needed.
+
+If you run the API behind a reverse proxy such as Caddy and want generated image URLs to use the public HTTPS origin, set `PUBLIC_BASE_URL` to that external origin, for example `https://imagen.webonly.app`.
 
 These defaults follow the upstream Flux.2 klein documentation for standalone assets:
 
@@ -201,7 +204,7 @@ curl -X POST http://localhost:8000/v1/images/generations \
   "created": 1699000000,
   "data": [
     {
-      "url": "http://localhost:8000/files/<job-id>/image_001.png",
+      "url": "https://imagen.webonly.app/files/<job-id>/image_001.png",
       "revised_prompt": "A serene Japanese garden with cherry blossoms"
     }
   ]

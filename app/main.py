@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     llm_path: Path = Path("/models/Qwen3-4B-UD-Q4_K_XL.gguf")
 
     output_dir: Path = Path("/data/outputs")
-    public_base_url: str = "http://localhost:8000"
+    public_base_url: str = ""
     sd_server_listen_ip: str = "127.0.0.1"
     sd_server_port: int = 1234
     sd_server_start_timeout_seconds: int = 120
@@ -313,7 +313,10 @@ def build_backend_img_gen_payload(
 
 
 def abs_file_url(request: Request, relative_path: str) -> str:
-    # Serve under /files/{path}
+    file_path = str(request.app.url_path_for("files", path=relative_path))
+    public_base_url = settings.public_base_url.strip().rstrip("/")
+    if public_base_url:
+        return f"{public_base_url}{file_path}"
     return str(request.url_for("files", path=relative_path))
 
 
