@@ -1,12 +1,13 @@
 # FLUX.2-klein Stable Diffusion API
 
-A high-performance, OpenAI-compatible image generation API powered by [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) and the FLUX.2-klein model. Built with FastAPI, Docker, and GPU acceleration.
+A high-performance, OpenAI-compatible image generation API powered by [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp), the FLUX.2-klein model, and a persistent upstream `sd-server` backend managed by FastAPI. Built with Docker and GPU acceleration.
 
 ## Features
 
 - **OpenAI-compatible API** — Drop-in replacement for the `/v1/images/generations` endpoint
 - **GPU-accelerated** — NVIDIA CUDA support for fast image generation
-- **Async job queue** — Non-blocking image generation with configurable concurrency
+- **Persistent backend** — FastAPI starts one internal `sd-server` process and keeps model weights resident after startup
+- **Async job queue** — Non-blocking image generation with configurable wrapper-side concurrency
 - **Prometheus metrics** — Built-in observability with `/metrics` endpoint
 - **API key authentication** — Bearer token-based security
 - **Health checks** — Kubernetes-ready `/health/live` and `/health/ready` endpoints
@@ -18,7 +19,7 @@ A high-performance, OpenAI-compatible image generation API powered by [stable-di
 ```
 .
 ├── app/
-│   └── main.py              # FastAPI application, job manager, and API routes
+│   └── main.py              # FastAPI wrapper, sd-server manager, job manager, and API routes
 ├── data/
 │   └── .gitkeep             # Placeholder for output directory
 ├── models/
@@ -60,6 +61,10 @@ Edit `.env` to configure your environment. Key settings:
 | `TAESD_PATH` | Optional path to a compatible tiny decoder used through `--taesd` | empty |
 | `LLM_PATH` | Path to the Qwen3 4B GGUF file | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
 | `OUTPUT_DIR` | Directory for generated images | `/data/outputs` |
+| `SD_SERVER_LISTEN_IP` | Internal bind address for the managed `sd-server` | `127.0.0.1` |
+| `SD_SERVER_PORT` | Internal port for the managed `sd-server` | `1234` |
+| `SD_SERVER_START_TIMEOUT_SECONDS` | Startup wait time for backend readiness | `120` |
+| `SD_SERVER_POLL_INTERVAL_SECONDS` | Poll interval used while waiting on backend jobs | `0.5` |
 | `MAX_CONCURRENT_JOBS` | Max parallel generation jobs | `1` |
 | `QUEUE_MAXSIZE` | Maximum queue size | `16` |
 | `JOB_TIMEOUT_SECONDS` | Job timeout in seconds | `1800` |
@@ -86,7 +91,7 @@ These defaults follow the upstream Flux.2 klein documentation for standalone ass
 - FLUX.2 full VAE as the default decoder path
 - Optional TAESD only when you have a file that is actually compatible with `--taesd`
 
-The upstream Flux.2 examples use the full VAE through `--vae`. In this workspace, `flux2-vae.safetensors` is the known-good decoder asset. The local `small_decoder.safetensors` file is not enabled by default because it does not match the TAESD tensor layout that `sd-cli --taesd` expects.
+The upstream Flux.2 examples use the full VAE through `--vae`. In this workspace, `flux2-vae.safetensors` is the known-good decoder asset. The local `small_decoder.safetensors` file is not enabled by default because it does not match the TAESD tensor layout that upstream `--taesd` expects.
 
 ### 2. Place Model Files
 
@@ -125,6 +130,10 @@ Build caching notes:
 - The Docker build excludes `models/` and `data/` from the build context via `.dockerignore`, so large local assets no longer slow every rebuild.
 - Native compilation uses `ccache` and Python dependencies use a persistent `pip` cache through BuildKit cache mounts.
 - The expensive `stable-diffusion.cpp` build stage is isolated from application code changes, so editing `app/` should typically only rebuild the final runtime layers.
+
+Runtime note:
+
+- The FastAPI app launches an internal `sd-server` on startup and forwards generation requests to its native async API, so the model stays loaded between requests instead of being reloaded per job.
 
 ### 4. Verify
 
@@ -229,6 +238,11 @@ curl -X POST http://localhost:8000/v1/jobs/550e8400-e29b-41d4-a716-446655440000/
   -H "Authorization: Bearer sk-local"
 ```
 
+Cancellation note:
+
+- Wrapper-side queued jobs can always be cancelled.
+- Once upstream `sd-server` has started generating, cancellation depends on upstream behavior and queued backend jobs can be cancelled, but actively generating backend jobs currently return a conflict instead of being interrupted.
+
 ### List Models
 
 ```
@@ -244,10 +258,20 @@ GET /v1/models
     {
       "id": "flux-klein-4b",
       "object": "model",
-      "owned_by": "local"
+      "created": 1714867200,
+      "owned_by": "local",
+      "permission": [],
+      "root": "flux-klein-4b",
+      "parent": null
     }
   ]
 }
+```
+
+Single-model lookup is also available:
+
+```
+GET /v1/models/flux-klein-4b
 ```
 
 ### Health Checks
@@ -256,7 +280,7 @@ GET /v1/models
 # Liveness probe
 curl http://localhost:8000/health/live
 
-# Readiness probe (checks model files)
+# Readiness probe (checks model files and managed sd-server)
 curl http://localhost:8000/health/ready
 ```
 
@@ -335,6 +359,8 @@ export OUTPUT_DIR=./data/outputs
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+This starts the FastAPI wrapper, which in turn starts the local `sd-server` subprocess automatically.
+
 ## Architecture
 
 ### Job Pipeline
@@ -342,11 +368,13 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 1. **Request** arrives at `/v1/images/generations`
 2. **Authentication** is verified via API key
 3. **Job** is created and added to the async queue
-4. **Worker** picks up the job and executes `sd-cli` with the appropriate parameters
-5. **Result** is returned with URLs to generated images (or base64 data)
+4. **Worker** picks up the job and submits it to the internal `sd-server` async API
+5. **Backend** generates the image using the already-loaded model context
+6. **Wrapper** stores returned images under `/files/` and responds with URLs or base64 data
 
 ### Components
 
+- **`SDServerManager`** — Starts, monitors, and stops the persistent upstream `sd-server` process
 - **`JobManager`** — Manages the async job queue, workers, and cleanup
 - **`ImageGenerationRequest`** — Pydantic model for validating API requests
 - **`ImageGenerationResponse`** — Pydantic model for API responses

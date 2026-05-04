@@ -84,6 +84,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && /opt/venv/bin/pip install --cache-dir /root/.cache/pip -r /app/requirements.txt
 
 COPY --from=build /src/build/bin/sd-cli /usr/local/bin/sd-cli
+COPY --from=build /src/build/bin/sd-server /usr/local/bin/sd-server
 
 COPY app /app/app
 
