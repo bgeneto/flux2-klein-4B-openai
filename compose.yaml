@@ -12,20 +12,26 @@ services:
     restart: unless-stopped
 
     ports:
-      - "8000:8000"
+      - "8006:8000"
 
-    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
     ipc: host
     shm_size: "16gb"
-    init: true
     stop_grace_period: 30s
 
     environment:
       API_KEY: ${API_KEY:-sk-local}
       MODEL_ID: ${MODEL_ID:-flux-klein-4b}
-      MODEL_PATH: ${MODEL_PATH:-/models/flux-2-klein-4b-Q4_K_M.gguf}
-      VAE_PATH: ${VAE_PATH:-/models/flux2_ae.safetensors}
-      LLM_PATH: ${LLM_PATH:-/models/qwen_3_4b.safetensors}
+      MODEL_PATH: ${MODEL_PATH:-/models/flux-2-klein-4b-Q4_0.gguf}
+      VAE_PATH: ${VAE_PATH:-/models/flux2-vae.safetensors}
+      TAESD_PATH: ${TAESD_PATH:-}
+      LLM_PATH: ${LLM_PATH:-/models/Qwen3-4B-UD-Q4_K_XL.gguf}
 
       OUTPUT_DIR: ${OUTPUT_DIR:-/data/outputs}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}

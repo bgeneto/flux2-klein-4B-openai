@@ -23,7 +23,7 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ----------------------------
@@ -37,9 +37,10 @@ class Settings(BaseSettings):
     api_key: str = "sk-local"
     model_id: str = "flux-klein-4b"
 
-    model_path: Path = Path("/models/flux-2-klein-4b-Q4_K_M.gguf")
-    vae_path: Path = Path("/models/flux2_ae.safetensors")
-    llm_path: Path = Path("/models/qwen_3_4b.safetensors")
+    model_path: Path = Path("/models/flux-2-klein-4b-Q4_0.gguf")
+    vae_path: Optional[Path] = Path("/models/flux2-vae.safetensors")
+    taesd_path: Optional[Path] = None
+    llm_path: Path = Path("/models/Qwen3-4B-UD-Q4_K_XL.gguf")
 
     output_dir: Path = Path("/data/outputs")
     public_base_url: str = "http://localhost:8000"
@@ -62,6 +63,20 @@ class Settings(BaseSettings):
     disable_image_metadata: bool = False
 
     log_level: str = "INFO"
+
+    @field_validator("default_guidance", mode="before")
+    @classmethod
+    def empty_guidance_as_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
+
+    @field_validator("vae_path", "taesd_path", mode="before")
+    @classmethod
+    def empty_path_as_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
 
 
 settings = Settings()
@@ -217,6 +232,36 @@ def tail(text: bytes, limit: int = 6000) -> str:
     return s[-limit:]
 
 
+def required_asset_paths() -> dict[str, Path]:
+    paths: dict[str, Path] = {
+        "diffusion_model": settings.model_path,
+        "llm": settings.llm_path,
+    }
+
+    mode = decoder_mode()
+    if mode == "vae" and settings.vae_path is not None:
+        paths["vae"] = settings.vae_path
+    if mode == "taesd" and settings.taesd_path is not None:
+        paths["taesd"] = settings.taesd_path
+    return paths
+
+
+def decoder_mode() -> str:
+    if settings.vae_path is not None:
+        return "vae"
+    if settings.taesd_path is not None:
+        return "taesd"
+    raise RuntimeError("Either VAE_PATH or TAESD_PATH must be configured")
+
+
+def missing_required_assets() -> dict[str, str]:
+    return {
+        name: str(path)
+        for name, path in required_asset_paths().items()
+        if not path.exists()
+    }
+
+
 # ----------------------------
 # Job manager
 # ----------------------------
@@ -359,8 +404,6 @@ class JobManager:
             "sd-cli",
             "--diffusion-model",
             str(settings.model_path),
-            "--vae",
-            str(settings.vae_path),
             "--llm",
             str(settings.llm_path),
             "-p",
@@ -386,6 +429,11 @@ class JobManager:
             "--rng",
             settings.default_rng,
         ]
+
+        if decoder_mode() == "taesd":
+            cmd.extend(["--taesd", str(settings.taesd_path)])
+        else:
+            cmd.extend(["--vae", str(settings.vae_path)])
 
         if req.guidance is not None:
             cmd.extend(["--guidance", str(req.guidance)])
@@ -494,13 +542,11 @@ app.mount("/files", StaticFiles(directory=str(settings.output_dir)), name="files
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    missing = [
-        p
-        for p in [settings.model_path, settings.vae_path, settings.llm_path]
-        if not p.exists()
-    ]
+    decoder_mode()
+    missing = missing_required_assets()
     if missing:
-        raise RuntimeError(f"Missing model file(s): {', '.join(map(str, missing))}")
+        details = ", ".join(f"{name}={path}" for name, path in missing.items())
+        raise RuntimeError(f"Missing model file(s): {details}")
 
     # Verify the binary is callable
     proc = await asyncio.create_subprocess_exec(
@@ -549,16 +595,19 @@ async def health_live():
 
 @app.get("/health/ready")
 async def health_ready():
-    ok = (
-        settings.model_path.exists()
-        and settings.vae_path.exists()
-        and settings.llm_path.exists()
-    )
-    if not ok:
-        raise HTTPException(status_code=503, detail="Model files not ready")
+    missing = missing_required_assets()
+    if missing:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Model files not ready",
+                "missing": missing,
+            },
+        )
     return {
         "status": "ready",
         "model_id": settings.model_id,
+        "assets": {name: str(path) for name, path in required_asset_paths().items()},
         "queue_depth": manager.queue.qsize(),
         "max_concurrent_jobs": settings.max_concurrent_jobs,
     }
@@ -578,6 +627,9 @@ async def list_models():
                 "id": settings.model_id,
                 "object": "model",
                 "owned_by": "local",
+                "paths": {
+                    name: str(path) for name, path in required_asset_paths().items()
+                },
             }
         ],
     }

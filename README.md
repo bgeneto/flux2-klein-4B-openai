@@ -55,9 +55,10 @@ Edit `.env` to configure your environment. Key settings:
 |---|---|---|
 | `API_KEY` | Bearer token for authentication | `sk-local` |
 | `MODEL_ID` | Model identifier | `flux-klein-4b` |
-| `MODEL_PATH` | Path to the GGUF model file | `/models/flux-2-klein-4b-Q4_K_M.gguf` |
-| `VAE_PATH` | Path to the VAE file | `/models/flux2_ae.safetensors` |
-| `LLM_PATH` | Path to the LLM file | `/models/qwen_3_4b.safetensors` |
+| `MODEL_PATH` | Path to the FLUX.2-klein diffusion GGUF file | `/models/flux-2-klein-4b-Q4_0.gguf` |
+| `VAE_PATH` | Path to the full Flux.2 VAE used through `--vae` | `/models/flux2-vae.safetensors` |
+| `TAESD_PATH` | Optional path to a compatible tiny decoder used through `--taesd` | empty |
+| `LLM_PATH` | Path to the Qwen3 4B GGUF file | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
 | `OUTPUT_DIR` | Directory for generated images | `/data/outputs` |
 | `MAX_CONCURRENT_JOBS` | Max parallel generation jobs | `1` |
 | `QUEUE_MAXSIZE` | Maximum queue size | `16` |
@@ -78,16 +79,33 @@ Build-time apt mirror override:
 
 `docker compose` reads `APT_MIRROR` from `.env`, so the normal flow is to keep it in `.env.example`, copy that file to `.env`, and edit the value there as needed.
 
+These defaults follow the upstream Flux.2 klein documentation for standalone assets:
+
+- FLUX.2-klein 4B diffusion model in GGUF format
+- Qwen3 4B text encoder in GGUF format
+- FLUX.2 full VAE as the default decoder path
+- Optional TAESD only when you have a file that is actually compatible with `--taesd`
+
+The upstream Flux.2 examples use the full VAE through `--vae`. In this workspace, `flux2-vae.safetensors` is the known-good decoder asset. The local `small_decoder.safetensors` file is not enabled by default because it does not match the TAESD tensor layout that `sd-cli --taesd` expects.
+
 ### 2. Place Model Files
 
 Place your model files in the `models/` directory:
 
 ```bash
 # Example:
-# models/flux-2-klein-4b-Q4_K_M.gguf
-# models/flux2_ae.safetensors
-# models/qwen_3_4b.safetensors
+# models/flux-2-klein-4b-Q4_0.gguf
+# models/Qwen3-4B-UD-Q4_K_XL.gguf
+# models/flux2-vae.safetensors
 ```
+
+Supported alternatives:
+
+- Set `MODEL_PATH=/models/flux-2-klein-base-4b-Q4_K_M.gguf` if you want the base 4B diffusion model instead of klein 4B.
+- Leave `TAESD_PATH=` empty to use only the full VAE.
+- Set `VAE_PATH=` only if you want to disable the full VAE and rely on a compatible `--taesd` decoder instead.
+- If you have the upstream `full_encoder_small_decoder.safetensors` artifact, use it through `VAE_PATH`, not `TAESD_PATH`.
+- If your mounted filenames differ from the examples above, only the environment variable values need to change.
 
 ### 3. Build and Run
 
@@ -310,7 +328,7 @@ docker build -t flux-api .
 # Set environment variables
 export MODEL_PATH=/path/to/model.gguf
 export VAE_PATH=/path/to/vae.safetensors
-export LLM_PATH=/path/to/llm.safetensors
+export LLM_PATH=/path/to/qwen3.gguf
 export OUTPUT_DIR=./data/outputs
 
 # Run
