@@ -85,7 +85,7 @@ Build-time apt mirror override:
 
 `docker compose` reads `APT_MIRROR` from `.env`, so the normal flow is to keep it in `.env.example`, copy that file to `.env`, and edit the value there as needed.
 
-If you run the API behind a reverse proxy such as Caddy and want generated image URLs to use the public HTTPS origin, set `PUBLIC_BASE_URL` to that external origin, for example `https://imagen.webonly.app`.
+If you run the API behind a reverse proxy such as Caddy and want generated image URLs to use the public HTTPS origin, set `PUBLIC_BASE_URL` to that external origin, for example `https://imagen.app`.
 
 These defaults follow the upstream Flux.2 klein documentation for standalone assets:
 
@@ -204,7 +204,7 @@ curl -X POST http://localhost:8006/v1/images/generations \
   "created": 1699000000,
   "data": [
     {
-      "url": "https://imagen.webonly.app/files/<job-id>/image_001.png",
+      "url": "https://imagen.app/files/<job-id>/image_001.png",
       "revised_prompt": "A serene Japanese garden with cherry blossoms"
     }
   ]

@@ -93,7 +93,7 @@ class Pipe:
         self.name = "FLUX.2 Klein: "
         self.valves = self.Valves(
             IMAGE_API_URL=os.getenv(
-                "IMAGE_API_URL", "https://imagen.webonly.app/v1/images/generations"
+                "IMAGE_API_URL", "https://imagen.app/v1/images/generations"
             ),
             IMAGE_API_KEY=os.getenv("IMAGE_API_KEY", ""),
             MODEL_ID=os.getenv("MODEL_ID", "flux-klein-4b"),
