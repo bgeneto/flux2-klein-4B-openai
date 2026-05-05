@@ -69,3 +69,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=flux2-klein-api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

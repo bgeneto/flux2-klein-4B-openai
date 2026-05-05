@@ -484,6 +484,15 @@ class SDServerManager:
 
         self.process = None
 
+    async def restart(self) -> None:
+        """Stop and restart the sd-server. Used for self-healing."""
+        logger.warning("sd-server appears unhealthy, attempting restart...")
+        await self.stop()
+        # Small delay to allow port release
+        await asyncio.sleep(2)
+        await self.start()
+        logger.info("sd-server restart complete")
+
     async def wait_until_ready(self) -> dict[str, Any]:
         client = self._ensure_client()
         loop = asyncio.get_running_loop()
@@ -893,13 +902,20 @@ async def health_ready():
     try:
         capabilities = await sd_server.capabilities()
     except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "message": "sd-server is not ready",
-                "error": str(exc),
-            },
-        ) from exc
+        # Attempt self-healing: restart sd-server
+        try:
+            await sd_server.restart()
+            # After restart, check again
+            capabilities = await sd_server.capabilities()
+        except Exception as retry_exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "sd-server is not ready, recovery failed",
+                    "error": str(exc),
+                    "recovery_error": str(retry_exc),
+                },
+            ) from exc
 
     return {
         "status": "ready",
