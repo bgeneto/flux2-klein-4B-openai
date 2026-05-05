@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     sd_server_listen_ip: str = "127.0.0.1"
     sd_server_port: int = 1234
     sd_server_start_timeout_seconds: int = 120
-    sd_server_poll_interval_seconds: float = 0.5
+    sd_server_poll_interval_seconds: float = 1.0
 
     max_concurrent_jobs: int = 1
     queue_maxsize: int = 16

@@ -65,7 +65,7 @@ Edit `.env` to configure your environment. Key settings:
 | `SD_SERVER_LISTEN_IP` | Internal bind address for the managed `sd-server` | `127.0.0.1` |
 | `SD_SERVER_PORT` | Internal port for the managed `sd-server` | `1234` |
 | `SD_SERVER_START_TIMEOUT_SECONDS` | Startup wait time for backend readiness | `120` |
-| `SD_SERVER_POLL_INTERVAL_SECONDS` | Poll interval used while waiting on backend jobs | `0.5` |
+| `SD_SERVER_POLL_INTERVAL_SECONDS` | Poll interval used while waiting on backend jobs | `1.0` |
 | `MAX_CONCURRENT_JOBS` | Max parallel generation jobs | `1` |
 | `QUEUE_MAXSIZE` | Maximum queue size | `16` |
 | `JOB_TIMEOUT_SECONDS` | Job timeout in seconds | `1800` |
@@ -192,7 +192,7 @@ curl -X POST http://localhost:8000/v1/images/generations \
     "prompt": "A serene Japanese garden with cherry blossoms",
     "size": "1024x1024",
     "steps": 4,
-    "cfg_scale": 7.0,
+    "cfg_scale": 1.0,
     "n": 1
   }'
 ```

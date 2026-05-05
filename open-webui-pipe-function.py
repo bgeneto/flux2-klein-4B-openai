@@ -65,7 +65,7 @@ class Pipe:
         CFG_SCALE: float = Field(
             default=1.0,
             ge=0.0,
-            le=50.0,
+            le=5.0,
             description="Default CFG scale.",
         )
         RESPONSE_FORMAT: str = Field(
