@@ -142,13 +142,13 @@ Runtime note:
 
 ```bash
 # Health check
-curl http://localhost:8000/health/live
+curl http://localhost:8006/health/live
 
 # Ready check (includes model verification)
-curl http://localhost:8000/health/ready
+curl http://localhost:8006/health/ready
 
 # Metrics
-curl http://localhost:8000/metrics
+curl http://localhost:8006/metrics
 ```
 
 ## API Reference
@@ -185,7 +185,7 @@ POST /v1/images/generations
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/images/generations \
+curl -X POST http://localhost:8006/v1/images/generations \
   -H "Authorization: Bearer sk-local" \
   -H "Content-Type: application/json" \
   -d '{
@@ -217,7 +217,7 @@ Submit a job and poll for results:
 
 ```bash
 # Submit job (returns 202 Accepted)
-curl -X POST http://localhost:8000/v1/images/generations \
+curl -X POST http://localhost:8006/v1/images/generations \
   -H "Authorization: Bearer sk-local" \
   -H "Content-Type: application/json" \
   -d '{
@@ -233,11 +233,11 @@ curl -X POST http://localhost:8000/v1/images/generations \
 # }
 
 # Check job status
-curl http://localhost:8000/v1/jobs/550e8400-e29b-41d4-a716-446655440000 \
+curl http://localhost:8006/v1/jobs/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer sk-local"
 
 # Cancel a job
-curl -X POST http://localhost:8000/v1/jobs/550e8400-e29b-41d4-a716-446655440000/cancel \
+curl -X POST http://localhost:8006/v1/jobs/550e8400-e29b-41d4-a716-446655440000/cancel \
   -H "Authorization: Bearer sk-local"
 ```
 
@@ -281,10 +281,10 @@ GET /v1/models/flux-klein-4b
 
 ```bash
 # Liveness probe
-curl http://localhost:8000/health/live
+curl http://localhost:8006/health/live
 
 # Readiness probe (checks model files and managed sd-server)
-curl http://localhost:8000/health/ready
+curl http://localhost:8006/health/ready
 ```
 
 ### Metrics
@@ -292,7 +292,7 @@ curl http://localhost:8000/health/ready
 Prometheus metrics are available at `/metrics`:
 
 ```bash
-curl http://localhost:8000/metrics
+curl http://localhost:8006/metrics
 ```
 
 Available metrics:
@@ -340,7 +340,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Run the server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8006 --reload
 ```
 
 ### Building the Docker Image
@@ -359,7 +359,7 @@ export LLM_PATH=/path/to/qwen3.gguf
 export OUTPUT_DIR=./data/outputs
 
 # Run
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8006
 ```
 
 This starts the FastAPI wrapper, which in turn starts the local `sd-server` subprocess automatically.
