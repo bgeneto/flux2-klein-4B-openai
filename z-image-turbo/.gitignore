@@ -3,7 +3,6 @@ __pycache__/
 *.pyo
 .env
 .env.*
-!.env.example
 data/
 models/
 weights/
@@ -12,8 +11,4 @@ weights/
 *.zip
 .vscode/
 .idea/
-*.md
-Dockerfile
-docker-compose.yml
-compose.yaml
 *.log

@@ -1,0 +1,45 @@
+services:
+  zimage-turbo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/zimage-turbo-sglang:latest
+    container_name: zimage-turbo
+    restart: unless-stopped
+
+    ports:
+      - "30010:30010"
+
+    gpus: all
+    ipc: host
+    shm_size: "32gb"
+
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /cache/huggingface
+
+      CUDA_VISIBLE_DEVICES: "0"
+
+      MODEL_PATH: Tongyi-MAI/Z-Image-Turbo
+      PORT: "30010"
+      NUM_GPUS: "1"
+
+      # fast = lower latency; lowvram = text encoder CPU offload + VAE tiling/slicing
+      ZIMAGE_MODE: fast
+
+      # RTX 3090: int4. Use rank 32 for fastest, 128 for better quality.
+      ZIMAGE_PRECISION: int4
+      ZIMAGE_RANK: "32"
+
+      NUM_INFERENCE_STEPS: "8"
+      GUIDANCE_SCALE: "0.0"
+
+      DEFAULT_HEIGHT: "1024"
+      DEFAULT_WIDTH: "1024"
+
+      DIT_PRECISION: bf16
+      VAE_PRECISION: fp16
+
+    volumes:
+      - ~/.cache/huggingface:/cache/huggingface
+      - ./weights:/weights
