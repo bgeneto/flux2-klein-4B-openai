@@ -1,0 +1,82 @@
+services:
+  z-image-api:
+    build:
+      context: .
+      args:
+        CUDA_VERSION: "12.6.3"
+        UBUNTU_VERSION: "24.04"
+        APT_MIRROR: ${APT_MIRROR:-https://ubuntu.c3sl.ufpr.br/ubuntu/}
+        # Pin this in production to a tested commit or tag:
+        SD_CPP_REF: "master"
+    container_name: z-image-turbo-api
+    restart: unless-stopped
+
+    ports:
+      - "8006:8000"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+    ipc: host
+    shm_size: "16gb"
+    stop_grace_period: 30s
+
+    environment:
+      API_KEY: ${API_KEY:-sk-local}
+      MODEL_ID: ${MODEL_ID:-z-image-turbo}
+      MODEL_PATH: ${MODEL_PATH:-/models/z_image_turbo-Q4_K.gguf}
+      VAE_PATH: ${VAE_PATH:-/models/ae.safetensors}
+      TAESD_PATH: ${TAESD_PATH:-}
+      LLM_PATH: ${LLM_PATH:-/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf}
+
+      OUTPUT_DIR: ${OUTPUT_DIR:-/data/outputs}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL-}
+      SD_SERVER_LISTEN_IP: ${SD_SERVER_LISTEN_IP:-127.0.0.1}
+      SD_SERVER_PORT: ${SD_SERVER_PORT:-1234}
+      SD_SERVER_START_TIMEOUT_SECONDS: ${SD_SERVER_START_TIMEOUT_SECONDS:-120}
+      SD_SERVER_POLL_INTERVAL_SECONDS: ${SD_SERVER_POLL_INTERVAL_SECONDS:-1.0}
+
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-1}
+      QUEUE_MAXSIZE: ${QUEUE_MAXSIZE:-16}
+      JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-180}
+      RETENTION_HOURS: ${RETENTION_HOURS:-72}
+
+      DEFAULT_STEPS: ${DEFAULT_STEPS:-4}
+      DEFAULT_CFG_SCALE: ${DEFAULT_CFG_SCALE:-1.0}
+      DEFAULT_SAMPLER: ${DEFAULT_SAMPLER:-euler}
+      DEFAULT_RNG: ${DEFAULT_RNG:-cuda}
+      DEFAULT_GUIDANCE: ${DEFAULT_GUIDANCE:-}
+      DEFAULT_THREADS: ${DEFAULT_THREADS:-0}
+
+      ENABLE_OFFLOAD_TO_CPU: ${ENABLE_OFFLOAD_TO_CPU:-true}
+      ENABLE_DIFFUSION_FA: ${ENABLE_DIFFUSION_FA:-true}
+      ENABLE_VAE_CONV_DIRECT: ${ENABLE_VAE_CONV_DIRECT:-false}
+      ENABLE_VAE_TILING: ${ENABLE_VAE_TILING:-false}
+      ENABLE_CLIP_ON_CPU: ${ENABLE_CLIP_ON_CPU:-false}
+      ENABLE_MMAP: ${ENABLE_MMAP:-false}
+      DISABLE_IMAGE_METADATA: ${DISABLE_IMAGE_METADATA:-false}
+
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+    volumes:
+      - ./models:/models:ro
+      - ./data:/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=z-image-turbo-api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
