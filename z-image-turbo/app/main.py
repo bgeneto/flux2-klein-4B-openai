@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     job_timeout_seconds: int = 1800
     retention_hours: int = 72
 
-    default_steps: int = 4
+    default_steps: int = 8
     default_cfg_scale: float = 1.0
     default_sampler: str = "euler"
     default_rng: str = "cuda"

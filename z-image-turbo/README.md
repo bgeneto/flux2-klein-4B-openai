@@ -11,6 +11,8 @@ defaults follow [How to Use Z-Image on a GPU with Only 4GB VRAM.md](How%20to%20U
 - diffusion model: `z_image_turbo-Q4_K.gguf`
 - VAE: `ae.safetensors`
 - LLM/text encoder: `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`
+- sampling steps: `8`
+- CFG scale: `1.0`
 - low-VRAM flags enabled by default: `--offload-to-cpu` and `--diffusion-fa`
 - optional low-VRAM flags exposed through env vars: `--vae-conv-direct`,
   `--vae-tiling`, and `--clip-on-cpu`
@@ -132,7 +134,7 @@ The API is published on `http://localhost:8006` by default.
 | `MAX_CONCURRENT_JOBS` | Wrapper-side generation concurrency. | `1` |
 | `QUEUE_MAXSIZE` | Max queued jobs. | `16` |
 | `JOB_TIMEOUT_SECONDS` | Per-job timeout. | `180` |
-| `DEFAULT_STEPS` | Default sampling steps. | `4` |
+| `DEFAULT_STEPS` | Default sampling steps. Z-Image Turbo is distilled for 8 NFE / steps. | `8` |
 | `DEFAULT_CFG_SCALE` | Default CFG scale. | `1.0` |
 | `DEFAULT_SAMPLER` | Default sampler. | `euler` |
 | `DEFAULT_RNG` | Random number generator. | `cuda` |
@@ -148,6 +150,18 @@ The API is published on `http://localhost:8006` by default.
 Set `ENABLE_VAE_CONV_DIRECT=true`, `ENABLE_VAE_TILING=true`, or
 `ENABLE_CLIP_ON_CPU=true` when you need the optional memory-saving behavior
 described in the Z-Image 4GB VRAM note.
+
+### Recommended Z-Image Turbo Defaults
+
+Use `DEFAULT_STEPS=8` for normal use. Z-Image Turbo is the distilled variant of
+Z-Image and is designed around 8 function evaluations / sampling steps. Four
+steps may run faster, but it is below the model's intended operating point and
+can reduce prompt adherence, text rendering, and fine detail.
+
+Keep `DEFAULT_CFG_SCALE=1.0` for this stable-diffusion.cpp setup. The leejet
+GGUF example uses `--cfg-scale 1.0`; higher CFG is usually not needed for the
+Turbo model and may hurt image quality. If you experiment, change one setting at
+a time and compare fixed-seed outputs.
 
 ## Verify
 
@@ -167,7 +181,7 @@ curl -X POST http://localhost:8006/v1/images/generations \
     "model": "z-image-turbo",
     "prompt": "A cinematic rainy neon metropolis at night",
     "size": "512x1024",
-    "steps": 4,
+    "steps": 8,
     "cfg_scale": 1.0,
     "n": 1
   }'
