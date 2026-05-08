@@ -7,7 +7,7 @@ modified: 2026-05-08
 version: 0.4.2
 license: MIT
 requirements: pydantic, aiohttp
-environment_variables: IMAGE_API_URL, IMAGE_API_KEY, MODEL_ID, IMAGE_SIZE, NUM_IMAGES, STEPS, CFG_SCALE, RESPONSE_FORMAT, SAMPLING_METHOD, NEGATIVE_PROMPT, REQUEST_TIMEOUT_SECONDS
+environment_variables: IMAGE_API_URL, IMAGE_API_KEY, MODEL_ID, IMAGE_SIZE, NUM_IMAGES, STEPS, CFG_SCALE, RESPONSE_FORMAT, SAMPLING_METHOD, REQUEST_TIMEOUT_SECONDS
 """
 
 import base64
@@ -76,10 +76,6 @@ class Pipe:
             default="",
             description="Optional sampler name to send with requests.",
         )
-        NEGATIVE_PROMPT: str = Field(
-            default="",
-            description="Optional default negative prompt.",
-        )
         REQUEST_TIMEOUT_SECONDS: int = Field(
             default=180,
             ge=1,
@@ -103,7 +99,6 @@ class Pipe:
             CFG_SCALE=os.getenv("CFG_SCALE", 1.0),
             RESPONSE_FORMAT=os.getenv("RESPONSE_FORMAT", "b64_json"),
             SAMPLING_METHOD=os.getenv("SAMPLING_METHOD", ""),
-            NEGATIVE_PROMPT=os.getenv("NEGATIVE_PROMPT", ""),
             REQUEST_TIMEOUT_SECONDS=os.getenv("REQUEST_TIMEOUT_SECONDS", 180),
         )
 
@@ -161,7 +156,7 @@ class Pipe:
         if model_id:
             payload["model"] = model_id
 
-        negative_prompt = body.get("negative_prompt") or self.valves.NEGATIVE_PROMPT
+        negative_prompt = body.get("negative_prompt")
         if isinstance(negative_prompt, str) and negative_prompt.strip():
             payload["negative_prompt"] = negative_prompt.strip()
 
