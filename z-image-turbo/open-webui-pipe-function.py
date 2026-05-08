@@ -3,8 +3,8 @@ title: Z-Image Turbo Manifold Function for OpenAI-Compatible Image Generation.
 author: bgeneto
 author_url: https://github.com/bgeneto/open-webui-flux-image-gen
 funding_url: https://github.com/open-webui
-modified: 2026-05-04
-version: 0.4.1
+modified: 2026-05-08
+version: 0.4.2
 license: MIT
 requirements: pydantic, aiohttp
 environment_variables: IMAGE_API_URL, IMAGE_API_KEY, MODEL_ID, IMAGE_SIZE, NUM_IMAGES, STEPS, CFG_SCALE, RESPONSE_FORMAT, SAMPLING_METHOD, NEGATIVE_PROMPT, REQUEST_TIMEOUT_SECONDS
@@ -278,7 +278,9 @@ class Pipe:
         timeout = aiohttp.ClientTimeout(total=self.valves.REQUEST_TIMEOUT_SECONDS)
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            logger.info("Sending Z-Image Turbo request to %s", self.valves.IMAGE_API_URL)
+            logger.info(
+                "Sending Z-Image Turbo request to %s", self.valves.IMAGE_API_URL
+            )
             logger.debug("Request payload: %s", payload)
 
             async with session.post(

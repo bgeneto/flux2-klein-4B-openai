@@ -48,6 +48,8 @@ services:
       DEFAULT_STEPS: ${DEFAULT_STEPS:-8}
       DEFAULT_CFG_SCALE: ${DEFAULT_CFG_SCALE:-1.0}
       DEFAULT_SAMPLER: ${DEFAULT_SAMPLER:-euler}
+      DEFAULT_SCHEDULER: ${DEFAULT_SCHEDULER:-smoothstep}
+      DEFAULT_FLOW_SHIFT: ${DEFAULT_FLOW_SHIFT:-3.0}
       DEFAULT_RNG: ${DEFAULT_RNG:-cuda}
       DEFAULT_GUIDANCE: ${DEFAULT_GUIDANCE:-}
       DEFAULT_THREADS: ${DEFAULT_THREADS:-0}
@@ -63,7 +65,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
     volumes:
-      - ../models:/models:ro
+      - ./models:/models:ro
       - ./data:/data
 
     healthcheck:

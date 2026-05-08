@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     default_steps: int = 8
     default_cfg_scale: float = 1.0
     default_sampler: str = "euler"
+    default_scheduler: Optional[str] = "smoothstep"
+    default_flow_shift: Optional[float] = 3.0
     default_rng: str = "cuda"
     default_guidance: Optional[float] = None
     default_threads: int = 0
@@ -76,6 +78,20 @@ class Settings(BaseSettings):
     @field_validator("default_guidance", mode="before")
     @classmethod
     def empty_guidance_as_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
+
+    @field_validator("default_flow_shift", mode="before")
+    @classmethod
+    def empty_flow_shift_as_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
+
+    @field_validator("default_scheduler", mode="before")
+    @classmethod
+    def empty_scheduler_as_none(cls, value: Any) -> Any:
         if value == "":
             return None
         return value
@@ -405,6 +421,12 @@ class SDServerManager:
 
         if settings.default_guidance is not None:
             cmd.extend(["--guidance", str(settings.default_guidance)])
+
+        if settings.default_scheduler is not None:
+            cmd.extend(["--scheduler", settings.default_scheduler])
+
+        if settings.default_flow_shift is not None:
+            cmd.extend(["--flow-shift", str(settings.default_flow_shift)])
 
         if settings.default_threads and settings.default_threads > 0:
             cmd.extend(["-t", str(settings.default_threads)])

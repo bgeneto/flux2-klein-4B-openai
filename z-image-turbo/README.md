@@ -13,6 +13,8 @@ defaults follow [How to Use Z-Image on a GPU with Only 4GB VRAM.md](How%20to%20U
 - LLM/text encoder: `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`
 - sampling steps: `8`
 - CFG scale: `1.0`
+- sampler/scheduler: `euler` + `smoothstep`
+- flow shift: `3.0`
 - low-VRAM flags enabled by default: `--offload-to-cpu` and `--diffusion-fa`
 - optional low-VRAM flags exposed through env vars: `--vae-conv-direct`,
   `--vae-tiling`, and `--clip-on-cpu`
@@ -137,6 +139,8 @@ The API is published on `http://localhost:8006` by default.
 | `DEFAULT_STEPS` | Default sampling steps. Z-Image Turbo is distilled for 8 NFE / steps. | `8` |
 | `DEFAULT_CFG_SCALE` | Default CFG scale. | `1.0` |
 | `DEFAULT_SAMPLER` | Default sampler. | `euler` |
+| `DEFAULT_SCHEDULER` | Default scheduler passed to `--scheduler`. `smoothstep` is commonly used with Z-Image in stable-diffusion.cpp. | `smoothstep` |
+| `DEFAULT_FLOW_SHIFT` | Flow shift passed to `--flow-shift`. Z-Image discussions note a default of `3.0`. | `3.0` |
 | `DEFAULT_RNG` | Random number generator. | `cuda` |
 | `ENABLE_OFFLOAD_TO_CPU` | Adds `--offload-to-cpu`. Recommended for 4GB VRAM. | `true` |
 | `ENABLE_DIFFUSION_FA` | Adds `--diffusion-fa`. Recommended for 4GB VRAM. | `true` |
@@ -162,6 +166,105 @@ Keep `DEFAULT_CFG_SCALE=1.0` for this stable-diffusion.cpp setup. The leejet
 GGUF example uses `--cfg-scale 1.0`; higher CFG is usually not needed for the
 Turbo model and may hurt image quality. If you experiment, change one setting at
 a time and compare fixed-seed outputs.
+
+For stable-diffusion.cpp specifically, this project also sets
+`DEFAULT_SCHEDULER=smoothstep` and `DEFAULT_FLOW_SHIFT=3.0`. Those values match
+working Z-Image settings discussed by stable-diffusion.cpp users and avoid
+falling back to generic diffusion defaults.
+
+### Sampler And Negative Prompts
+
+`DEFAULT_SAMPLER=euler` is the conservative default for this project. It is
+fast, stable, and appears in working stable-diffusion.cpp Z-Image examples.
+Other samplers can work:
+
+- `euler` with `smoothstep` is the safest first choice.
+- `heun` and `dpm2` can produce good results, but stable-diffusion.cpp users
+  report that they are slower and often need fewer steps, for example 4-5 steps
+  instead of 7-9 Euler steps.
+- If you change sampler, keep `DEFAULT_SCHEDULER=smoothstep`,
+  `DEFAULT_FLOW_SHIFT=3.0`, `DEFAULT_CFG_SCALE=1.0`, and a fixed seed while
+  comparing.
+
+Negative prompts are not recommended for normal Z-Image Turbo use. The official
+Diffusers Z-Image pipeline examples use `guidance_scale=0.0`, and Diffusers
+documents that negative prompts are ignored when guidance is not enabled. In
+this stable-diffusion.cpp setup, `cfg_scale=1.0` follows the leejet GGUF example,
+so negative prompts should be treated as unsupported or at least unreliable for
+Turbo. Put restrictions in the positive prompt instead, for example:
+
+```text
+a clean product photo on a white table, no text, no watermark, no logo
+```
+
+## Troubleshooting White Images
+
+If generation succeeds but the PNG is completely white, check these first:
+
+1. Confirm the files are real model files, not failed downloads:
+
+   ```bash
+   ls -lh models
+   file models/ae.safetensors models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf models/z_image_turbo-Q4_K.gguf
+   ```
+
+   `ae.safetensors` should be a large binary file, not a small HTML, JSON, or
+   text file. Hugging Face gated downloads can save an error page under the
+   requested filename if you have not accepted the model terms or authenticated.
+
+2. Prefer one of the quantizations recommended by the stable-diffusion.cpp
+   Z-Image 4GB VRAM wiki if your `z_image_turbo-Q4_K.gguf` keeps producing
+   white images:
+
+   ```text
+   z_image_turbo-Q4_0.gguf
+   z_image_turbo-Q3_K.gguf
+   ```
+
+   The wiki recommends `Q4_0` or `Q3_K` for 4GB VRAM. `Q4_K` appears in the
+   comparison table and may work for some users, but it is not the listed 4GB
+   recommendation.
+
+3. Try disabling Flash Attention if your GPU/driver/backend has a kernel issue:
+
+   ```bash
+   ENABLE_DIFFUSION_FA=false docker compose up --force-recreate
+   ```
+
+4. Keep Z-Image-specific sampling defaults while testing:
+
+   ```text
+   DEFAULT_STEPS=8
+   DEFAULT_CFG_SCALE=1.0
+   DEFAULT_SAMPLER=euler
+   DEFAULT_SCHEDULER=smoothstep
+   DEFAULT_FLOW_SHIFT=3.0
+   ```
+
+5. Test the backend directly with `sd-cli` inside the container so you can
+   separate stable-diffusion.cpp/model issues from the FastAPI wrapper:
+
+   ```bash
+   docker compose run --rm z-image-api sd-cli \
+     --diffusion-model /models/z_image_turbo-Q4_K.gguf \
+     --vae /models/ae.safetensors \
+     --llm /models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
+     --steps 8 \
+     --cfg-scale 1.0 \
+     --sampling-method euler \
+     --scheduler smoothstep \
+     --flow-shift 3.0 \
+     --offload-to-cpu \
+     --diffusion-fa \
+     -H 1024 \
+     -W 1024 \
+     -p "a detailed photo of a red apple on a wooden table" \
+     -o /data/z-image-smoke-test.png
+   ```
+
+   If this direct command also produces a white image, the problem is almost
+   certainly the model files, quantization, GPU backend, or stable-diffusion.cpp
+   build rather than this API wrapper.
 
 ## Verify
 
