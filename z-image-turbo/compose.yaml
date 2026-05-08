@@ -31,7 +31,7 @@ services:
       MODEL_PATH: ${MODEL_PATH:-/models/z_image_turbo-Q4_K.gguf}
       VAE_PATH: ${VAE_PATH:-/models/ae.safetensors}
       TAESD_PATH: ${TAESD_PATH:-}
-      LLM_PATH: ${LLM_PATH:-/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf}
+      LLM_PATH: ${LLM_PATH:-/models/Qwen3-4B-UD-Q4_K_XL.gguf}
 
       OUTPUT_DIR: ${OUTPUT_DIR:-/data/outputs}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL-}

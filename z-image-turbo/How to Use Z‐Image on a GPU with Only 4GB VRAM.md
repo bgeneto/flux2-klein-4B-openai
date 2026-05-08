@@ -2,11 +2,11 @@
 
 # How to Use Z‐Image on a GPU with Only 4GB VRAM
 
-leejet stable-diffusion.cpp project now supports z-image-turbo, see PR #1020 in  https://github.com/leejet/stable-diffusion.cpp/pull/1020  
+leejet stable-diffusion.cpp project now supports z-image-turbo, see PR #1020 in  https://github.com/leejet/stable-diffusion.cpp/pull/1020
 
 Github main project:
 
-[leejet/stable-diffusion.cpp: Diffusion model(SD,Flux,Wan,Qwen Image,Z-Image,...) inference in pure C/C++](https://github.com/leejet/stable-diffusion.cpp) 
+[leejet/stable-diffusion.cpp: Diffusion model(SD,Flux,Wan,Qwen Image,Z-Image,...) inference in pure C/C++](https://github.com/leejet/stable-diffusion.cpp)
 
 
 
@@ -30,7 +30,7 @@ You may use:
 
 ## Example Command
 
-`.\bin\Release\sd-cli.exe --diffusion-model z_image_turbo-Q3_K.gguf --vae ae.safetensors --llm Qwen3-4B-Instruct-2507-Q4_K_M.gguf -p "A cinematic, melancholic photograph of a solitary hooded figure walking through a sprawling, rain-slicked metropolis at night. The city lights are a chaotic blur of neon orange and cool blue, reflecting on the wet asphalt. The scene evokes a sense of being a single component in a vast machine. Superimposed over the image in a sleek, modern, slightly glitched font is the philosophical quote: 'THE CITY IS A CIRCUIT BOARD, AND I AM A BROKEN TRANSISTOR.' -- moody, atmospheric, profound, dark academic" --cfg-scale 1.0 -v --offload-to-cpu --diffusion-fa -H 1024 -W 512`
+`.\bin\Release\sd-cli.exe --diffusion-model z_image_turbo-Q3_K.gguf --vae ae.safetensors --llm Qwen3-4B-UD-Q4_K_XL.gguf -p "A cinematic, melancholic photograph of a solitary hooded figure walking through a sprawling, rain-slicked metropolis at night. The city lights are a chaotic blur of neon orange and cool blue, reflecting on the wet asphalt. The scene evokes a sense of being a single component in a vast machine. Superimposed over the image in a sleek, modern, slightly glitched font is the philosophical quote: 'THE CITY IS A CIRCUIT BOARD, AND I AM A BROKEN TRANSISTOR.' -- moody, atmospheric, profound, dark academic" --cfg-scale 1.0 -v --offload-to-cpu --diffusion-fa -H 1024 -W 512`
 
 ### Recommended Flags for Low VRAM
 
@@ -64,4 +64,4 @@ More command-line parameters can be found at <https://github.com/leejet/stable-d
 
 
 
-### 
+###

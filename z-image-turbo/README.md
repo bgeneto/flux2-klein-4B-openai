@@ -10,7 +10,7 @@ defaults follow [How to Use Z-Image on a GPU with Only 4GB VRAM.md](How%20to%20U
 
 - diffusion model: `z_image_turbo-Q4_K.gguf`
 - VAE: `ae.safetensors`
-- LLM/text encoder: `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`
+- LLM/text encoder: `Qwen3-4B-UD-Q4_K_XL.gguf`
 - sampling steps: `8`
 - CFG scale: `1.0`
 - sampler/scheduler: `euler` + `smoothstep`
@@ -66,7 +66,7 @@ Place the model files in `models/`:
 ```text
 models/z_image_turbo-Q4_K.gguf
 models/ae.safetensors
-models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+models/Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
 You already have `z_image_turbo-Q4_K.gguf`, so the additional files to download
@@ -75,14 +75,14 @@ are:
 | File | Use | Source |
 |---|---|---|
 | `ae.safetensors` | VAE passed to `sd-server --vae`. Use this instead of the Flux.2 Klein `flux2-vae.safetensors` default. | <https://huggingface.co/black-forest-labs/FLUX.1-schnell/blob/main/ae.safetensors> |
-| `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` | Qwen3 4B text encoder / LLM passed to `sd-server --llm`. Use this instead of the Flux.2 Klein `Qwen3-4B-UD-Q4_K_XL.gguf` file. | <https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/blob/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf> |
+| `Qwen3-4B-UD-Q4_K_XL.gguf` | Qwen3 4B text encoder / LLM passed to `sd-server --llm`. Use this instead of the Flux.2 Klein `Qwen3-4B-UD-Q4_K_XL.gguf` file. | <https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/blob/main/Qwen3-4B-UD-Q4_K_XL.gguf> |
 
 Optional lower-memory LLM alternative:
 
 - If system RAM or startup time is tight, you can choose a smaller file from the
   same Unsloth repository, such as `Qwen3-4B-Instruct-2507-Q3_K_M.gguf`, then set
   `LLM_PATH` in `.env` to that filename. The documented 4GB VRAM example uses
-  `Qwen3-4B-Instruct-2507-Q4_K_M.gguf`, so that remains the default here.
+  `Qwen3-4B-UD-Q4_K_XL.gguf`, so that remains the default here.
 
 Download examples:
 
@@ -97,8 +97,8 @@ curl -L -o ae.safetensors \
   "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors?download=true"
 
 # Qwen3 4B LLM/text encoder.
-curl -L -o Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
-  "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf?download=true"
+curl -L -o Qwen3-4B-UD-Q4_K_XL.gguf \
+  "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-UD-Q4_K_XL.gguf?download=true"
 ```
 
 After the downloads, `models/` should contain exactly these required runtime
@@ -108,7 +108,7 @@ assets:
 models/
 ├── z_image_turbo-Q4_K.gguf
 ├── ae.safetensors
-└── Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+└── Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
 Then build and run:
@@ -128,7 +128,7 @@ The API is published on `http://localhost:8006` by default.
 | `MODEL_PATH` | Z-Image Turbo diffusion GGUF path. | `/models/z_image_turbo-Q4_K.gguf` |
 | `VAE_PATH` | VAE path passed to `--vae`. | `/models/ae.safetensors` |
 | `TAESD_PATH` | Optional decoder passed to `--taesd` when `VAE_PATH` is empty. | empty |
-| `LLM_PATH` | Qwen3-4B GGUF path passed to `--llm`. | `/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf` |
+| `LLM_PATH` | Qwen3-4B GGUF path passed to `--llm`. | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
 | `OUTPUT_DIR` | Generated image directory. | `/data/outputs` |
 | `PUBLIC_BASE_URL` | External origin for returned `/files/...` URLs. | empty |
 | `SD_SERVER_LISTEN_IP` | Internal `sd-server` bind address. | `127.0.0.1` |
@@ -205,7 +205,7 @@ If generation succeeds but the PNG is completely white, check these first:
 
    ```bash
    ls -lh models
-   file models/ae.safetensors models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf models/z_image_turbo-Q4_K.gguf
+   file models/ae.safetensors models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_K.gguf
    ```
 
    `ae.safetensors` should be a large binary file, not a small HTML, JSON, or
@@ -248,7 +248,7 @@ If generation succeeds but the PNG is completely white, check these first:
    docker compose run --rm z-image-api sd-cli \
      --diffusion-model /models/z_image_turbo-Q4_K.gguf \
      --vae /models/ae.safetensors \
-     --llm /models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
+     --llm /models/Qwen3-4B-UD-Q4_K_XL.gguf \
      --steps 8 \
      --cfg-scale 1.0 \
      --sampling-method euler \

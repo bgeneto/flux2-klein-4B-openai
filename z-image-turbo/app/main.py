@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     model_path: Path = Path("/models/z_image_turbo-Q4_K.gguf")
     vae_path: Optional[Path] = Path("/models/ae.safetensors")
     taesd_path: Optional[Path] = None
-    llm_path: Path = Path("/models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf")
+    llm_path: Path = Path("/models/Qwen3-4B-UD-Q4_K_XL.gguf")
 
     output_dir: Path = Path("/data/outputs")
     public_base_url: str = ""
