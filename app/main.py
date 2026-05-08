@@ -639,8 +639,7 @@ class JobManager:
             raise HTTPException(
                 status_code=502,
                 detail=(
-                    "sd-server cancellation failed: "
-                    f"{summarize_backend_error(payload)}"
+                    f"sd-server cancellation failed: {summarize_backend_error(payload)}"
                 ),
             )
 
