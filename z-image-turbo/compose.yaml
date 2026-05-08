@@ -28,7 +28,7 @@ services:
     environment:
       API_KEY: ${API_KEY:-sk-local}
       MODEL_ID: ${MODEL_ID:-z-image-turbo}
-      MODEL_PATH: ${MODEL_PATH:-/models/z_image_turbo-Q4_K.gguf}
+      MODEL_PATH: ${MODEL_PATH:-/models/z_image_turbo-Q4_1.gguf}
       VAE_PATH: ${VAE_PATH:-/models/z-image-vae.safetensors}
       TAESD_PATH: ${TAESD_PATH:-}
       LLM_PATH: ${LLM_PATH:-/models/Qwen3-4B-UD-Q4_K_XL.gguf}

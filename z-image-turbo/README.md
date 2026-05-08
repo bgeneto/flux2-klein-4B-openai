@@ -8,7 +8,7 @@ Turbo GGUF weights, Qwen3-4B text encoder weights, and a persistent upstream
 This folder is a self-contained Z-Image Turbo copy of the parent project. The
 defaults follow [How to Use Z-Image on a GPU with Only 4GB VRAM.md](How%20to%20Use%20Z%E2%80%90Image%20on%20a%20GPU%20with%20Only%204GB%20VRAM.md):
 
-- diffusion model: `z_image_turbo-Q4_K.gguf`
+- diffusion model: `z_image_turbo-Q4_1.gguf`
 - VAE: `z-image-vae.safetensors`
 - LLM/text encoder: `Qwen3-4B-UD-Q4_K_XL.gguf`
 - sampling steps: `8`
@@ -64,12 +64,12 @@ cp .env.example .env
 Place the model files in `models/`:
 
 ```text
-models/z_image_turbo-Q4_K.gguf
+models/z_image_turbo-Q4_1.gguf
 models/z-image-vae.safetensors
 models/Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
-You already have `z_image_turbo-Q4_K.gguf`, so the additional files to download
+You already have `z_image_turbo-Q4_1.gguf`, so the additional files to download
 are:
 
 | File | Use | Source |
@@ -96,7 +96,7 @@ Download examples:
 cd z-image-turbo/models
 
 # You already have this file. Put it here with exactly this name:
-# z_image_turbo-Q4_K.gguf
+# z_image_turbo-Q4_1.gguf
 
 # Official Z-Image Turbo VAE.
 curl -L -o z-image-vae.safetensors \
@@ -112,7 +112,7 @@ assets:
 
 ```text
 models/
-├── z_image_turbo-Q4_K.gguf
+├── z_image_turbo-Q4_1.gguf
 ├── z-image-vae.safetensors
 └── Qwen3-4B-UD-Q4_K_XL.gguf
 ```
@@ -131,7 +131,7 @@ The API is published on `http://localhost:8006` by default.
 |---|---|---|
 | `API_KEY` | Bearer token. Set empty to disable auth. | `sk-local` |
 | `MODEL_ID` | OpenAI-compatible model id. | `z-image-turbo` |
-| `MODEL_PATH` | Z-Image Turbo diffusion GGUF path. | `/models/z_image_turbo-Q4_K.gguf` |
+| `MODEL_PATH` | Z-Image Turbo diffusion GGUF path. | `/models/z_image_turbo-Q4_1.gguf` |
 | `VAE_PATH` | VAE path passed to `--vae`. | `/models/z-image-vae.safetensors` |
 | `TAESD_PATH` | Optional decoder passed to `--taesd` when `VAE_PATH` is empty. | empty |
 | `LLM_PATH` | Qwen3-4B GGUF path passed to `--llm`. | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
@@ -211,14 +211,14 @@ If generation succeeds but the PNG is completely white, check these first:
 
    ```bash
    ls -lh models
-   file models/z-image-vae.safetensors models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_K.gguf
+   file models/z-image-vae.safetensors models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_1.gguf
    ```
 
    `z-image-vae.safetensors` should be a large binary file, not a small HTML,
    JSON, or text file.
 
 2. Prefer one of the quantizations recommended by the stable-diffusion.cpp
-   Z-Image 4GB VRAM wiki if your `z_image_turbo-Q4_K.gguf` keeps producing
+   Z-Image 4GB VRAM wiki if your `z_image_turbo-Q4_1.gguf` keeps producing
    white images:
 
    ```text
@@ -251,7 +251,7 @@ If generation succeeds but the PNG is completely white, check these first:
 
    ```bash
    docker compose run --rm z-image-api sd-cli \
-     --diffusion-model /models/z_image_turbo-Q4_K.gguf \
+     --diffusion-model /models/z_image_turbo-Q4_1.gguf \
      --vae /models/z-image-vae.safetensors \
      --llm /models/Qwen3-4B-UD-Q4_K_XL.gguf \
      --steps 8 \
