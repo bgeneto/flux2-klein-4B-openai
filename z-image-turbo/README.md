@@ -9,7 +9,7 @@ This folder is a self-contained Z-Image Turbo copy of the parent project. The
 defaults follow [How to Use Z-Image on a GPU with Only 4GB VRAM.md](How%20to%20Use%20Z%E2%80%90Image%20on%20a%20GPU%20with%20Only%204GB%20VRAM.md):
 
 - diffusion model: `z_image_turbo-Q4_K.gguf`
-- VAE: `ae.safetensors`
+- VAE: `ae-f16.gguf`
 - LLM/text encoder: `Qwen3-4B-UD-Q4_K_XL.gguf`
 - sampling steps: `8`
 - CFG scale: `1.0`
@@ -65,7 +65,7 @@ Place the model files in `models/`:
 
 ```text
 models/z_image_turbo-Q4_K.gguf
-models/ae.safetensors
+models/ae-f16.gguf
 models/Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
@@ -74,7 +74,7 @@ are:
 
 | File | Use | Source |
 |---|---|---|
-| `ae.safetensors` | VAE passed to `sd-server --vae`. Use this instead of the Flux.2 Klein `flux2-vae.safetensors` default. | <https://huggingface.co/black-forest-labs/FLUX.1-schnell/blob/main/ae.safetensors> |
+| `ae-f16.gguf` | VAE passed to `sd-server --vae`. Use this instead of the Flux.2 Klein `flux2-vae.safetensors` default. | <https://huggingface.co/black-forest-labs/FLUX.1-schnell/blob/main/ae-f16.gguf> |
 | `Qwen3-4B-UD-Q4_K_XL.gguf` | Qwen3 4B text encoder / LLM passed to `sd-server --llm`. Use this instead of the Flux.2 Klein `Qwen3-4B-UD-Q4_K_XL.gguf` file. | <https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/blob/main/Qwen3-4B-UD-Q4_K_XL.gguf> |
 
 Optional lower-memory LLM alternative:
@@ -93,8 +93,8 @@ cd z-image-turbo/models
 # z_image_turbo-Q4_K.gguf
 
 # VAE. The FLUX.1-schnell repository may require accepting the Hugging Face terms first.
-curl -L -o ae.safetensors \
-  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors?download=true"
+curl -L -o ae-f16.gguf \
+  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae-f16.gguf?download=true"
 
 # Qwen3 4B LLM/text encoder.
 curl -L -o Qwen3-4B-UD-Q4_K_XL.gguf \
@@ -107,7 +107,7 @@ assets:
 ```text
 models/
 ├── z_image_turbo-Q4_K.gguf
-├── ae.safetensors
+├── ae-f16.gguf
 └── Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
@@ -126,7 +126,7 @@ The API is published on `http://localhost:8006` by default.
 | `API_KEY` | Bearer token. Set empty to disable auth. | `sk-local` |
 | `MODEL_ID` | OpenAI-compatible model id. | `z-image-turbo` |
 | `MODEL_PATH` | Z-Image Turbo diffusion GGUF path. | `/models/z_image_turbo-Q4_K.gguf` |
-| `VAE_PATH` | VAE path passed to `--vae`. | `/models/ae.safetensors` |
+| `VAE_PATH` | VAE path passed to `--vae`. | `/models/ae-f16.gguf` |
 | `TAESD_PATH` | Optional decoder passed to `--taesd` when `VAE_PATH` is empty. | empty |
 | `LLM_PATH` | Qwen3-4B GGUF path passed to `--llm`. | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
 | `OUTPUT_DIR` | Generated image directory. | `/data/outputs` |
@@ -205,10 +205,10 @@ If generation succeeds but the PNG is completely white, check these first:
 
    ```bash
    ls -lh models
-   file models/ae.safetensors models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_K.gguf
+   file models/ae-f16.gguf models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_K.gguf
    ```
 
-   `ae.safetensors` should be a large binary file, not a small HTML, JSON, or
+   `ae-f16.gguf` should be a large binary file, not a small HTML, JSON, or
    text file. Hugging Face gated downloads can save an error page under the
    requested filename if you have not accepted the model terms or authenticated.
 
@@ -247,7 +247,7 @@ If generation succeeds but the PNG is completely white, check these first:
    ```bash
    docker compose run --rm z-image-api sd-cli \
      --diffusion-model /models/z_image_turbo-Q4_K.gguf \
-     --vae /models/ae.safetensors \
+     --vae /models/ae-f16.gguf \
      --llm /models/Qwen3-4B-UD-Q4_K_XL.gguf \
      --steps 8 \
      --cfg-scale 1.0 \
