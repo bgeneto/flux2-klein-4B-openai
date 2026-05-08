@@ -15,16 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Install huggingface_hub, hf_transfer, nunchaku, and FastAPI dependencies.
+# Install only the additional dependencies not included in the base image.
+# The base image already has sglang, torch, transformers, etc.
 # --break-system-packages required for Debian-based sglang:dev image.
-RUN python3 -m pip install --upgrade pip uv huggingface_hub hf_transfer --break-system-packages && \
-    if [ -d /sglang/python ]; then \
-      cd /sglang && python3 -m pip install -e "python[diffusion]" --break-system-packages; \
-    else \
-      uv pip install --system --break-system-packages "sglang[diffusion]" --prerelease=allow; \
-    fi && \
-    python3 -m pip install nunchaku --break-system-packages && \
-    python3 -m pip install --break-system-packages fastapi uvicorn pydantic pydantic-settings httpx prometheus-client
+RUN python3 -m pip install --break-system-packages \
+    huggingface_hub hf_transfer \
+    nunchaku \
+    fastapi uvicorn pydantic pydantic-settings httpx prometheus-client
 
 WORKDIR /app
 
