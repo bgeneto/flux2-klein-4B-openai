@@ -44,7 +44,6 @@ COPY --from=sglang-base /usr/local/lib/python3.11/site-packages/torch /usr/local
 COPY --from=sglang-base /usr/local/lib/python3.11/site-packages/huggingface_hub /usr/local/lib/python3.11/site-packages/huggingface_hub
 COPY --from=sglang-base /usr/local/lib/python3.11/site-packages/uvloop /usr/local/lib/python3.11/site-packages/uvloop
 COPY --from=sglang-base /usr/local/lib/python3.11/site-packages/trl /usr/local/lib/python3.11/site-packages/trl
-COPY --from=sglang-base /usr/local/lib/python3.11/site-packages/xformers /usr/local/lib/python3.11/site-packages/xformers
 
 WORKDIR /app
 
