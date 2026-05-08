@@ -63,7 +63,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
     volumes:
-      - ./models:/models:ro
+      - ../models:/models:ro
       - ./data:/data
 
     healthcheck:
