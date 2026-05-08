@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     model_id: str = "z-image-turbo"
 
     model_path: Path = Path("/models/z_image_turbo-Q4_K.gguf")
-    vae_path: Optional[Path] = Path("/models/ae-f16.gguf")
+    vae_path: Optional[Path] = Path("/models/z-image-vae.safetensors")
     taesd_path: Optional[Path] = None
     llm_path: Path = Path("/models/Qwen3-4B-UD-Q4_K_XL.gguf")
 
