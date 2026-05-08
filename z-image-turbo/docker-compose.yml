@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
 
     ports:
-      - "30010:30010"
+      - "8006:8006"
 
     gpus: all
     ipc: host
@@ -20,9 +20,11 @@ services:
 
       CUDA_VISIBLE_DEVICES: "0"
 
+      # SGLang internal configuration (not exposed to host)
+      SG_LANG_HOST: 0.0.0.0
+      SG_LANG_PORT: "30010"
+
       MODEL_PATH: Tongyi-MAI/Z-Image-Turbo
-      PORT: "30010"
-      NUM_GPUS: "1"
 
       # fast = lower latency; lowvram = text encoder CPU offload + VAE tiling/slicing
       ZIMAGE_MODE: fast
@@ -39,6 +41,15 @@ services:
 
       DIT_PRECISION: bf16
       VAE_PRECISION: fp16
+
+      # FastAPI configuration (exposed to host on port 8006)
+      FASTAPI_HOST: 0.0.0.0
+      FASTAPI_PORT: "8006"
+
+      # API key for authentication
+      API_KEY: ${API_KEY:-sk-local}
+
+      LOG_LEVEL: ${LOG_LEVEL:-info}
 
     volumes:
       - ~/.cache/huggingface:/cache/huggingface

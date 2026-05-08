@@ -22,8 +22,8 @@ A high-performance, OpenAI-compatible image generation API powered by [SGLang-Di
 ├── data/
 │   └── .gitkeep             # Placeholder for output directory
 ├── docker-compose.yml        # Docker Compose configuration
-├── Dockerfile                # SGLang + Nunchaku build
-├── entrypoint.sh             # Model download and SGLang serve startup
+├── Dockerfile                # Multi-stage: SGLang + FastAPI
+├── entrypoint.sh             # Model download, SGLang + FastAPI startup
 ├── requirements.txt          # Python dependencies
 ├── .env.example              # Environment variable template
 ├── .dockerignore
@@ -58,7 +58,8 @@ Edit `.env` to configure your environment. Key settings:
 |---|---|---|
 | `API_KEY` | Bearer token for authentication | `sk-local` |
 | `HF_TOKEN` | HuggingFace token for downloading weights | *(required)* |
-| `SGLANG_URL` | SGLang backend URL (internal) | `http://localhost:30010` |
+| `FASTAPI_PORT` | FastAPI port (exposed to host) | `8006` |
+| `SG_LANG_PORT` | SGLang internal port (not exposed) | `30010` |
 | `ZIMAGE_MODE` | `fast` (lower latency) or `lowvram` (CPU offload) | `fast` |
 | `ZIMAGE_PRECISION` | Nunchaku quantization precision | `int4` |
 | `ZIMAGE_RANK` | INT4 rank: `32` (fastest), `128` (better quality), `256` (highest quality) | `32` |
@@ -86,13 +87,13 @@ The first startup will automatically download the Nunchaku INT4 weights from Hug
 
 ```bash
 # Health check
-curl http://localhost:30010/health/live
+curl http://localhost:8006/health/live
 
 # Ready check (includes SGLang connectivity)
-curl http://localhost:30010/health/ready
+curl http://localhost:8006/health/ready
 
 # Metrics
-curl http://localhost:30010/metrics
+curl http://localhost:8006/metrics
 ```
 
 ## API Reference
@@ -126,7 +127,7 @@ POST /v1/images/generations
 **Example:**
 
 ```bash
-curl -X POST http://localhost:30010/v1/images/generations \
+curl -X POST http://localhost:8006/v1/images/generations \
   -H "Authorization: Bearer sk-local" \
   -H "Content-Type: application/json" \
   -d '{
@@ -148,7 +149,7 @@ import base64
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:30010/v1",
+    base_url="http://localhost:8006/v1",
     api_key="sk-local",
 )
 
@@ -189,10 +190,10 @@ GET /v1/models
 
 ```bash
 # Liveness probe
-curl http://localhost:30010/health/live
+curl http://localhost:8006/health/live
 
 # Readiness probe (checks SGLang backend)
-curl http://localhost:30010/health/ready
+curl http://localhost:8006/health/ready
 ```
 
 ### Metrics
@@ -200,7 +201,7 @@ curl http://localhost:30010/health/ready
 Prometheus metrics are available at `/metrics`:
 
 ```bash
-curl http://localhost:30010/metrics
+curl http://localhost:8006/metrics
 ```
 
 Available metrics:
@@ -209,26 +210,32 @@ Available metrics:
 |---|---|---|
 | `zimage_api_requests_total` | Counter | Total API requests by endpoint, method, status |
 
-## Configuration
+## Architecture
 
-### Environment Variables
+### Request Flow
 
-All configuration is managed via environment variables. Copy `.env.example` to `.env` and customize:
-
-```bash
-cp .env.example .env
+```
+┌──────────┐     ┌──────────────┐     ┌──────────────────┐
+│  Client  │────▶│  FastAPI     │────▶│  SGLang Backend  │
+│          │     │  (Proxy)     │     │  (sglang serve)  │
+│          │     │  :8006       │     │  :30010 (internal)│
+└──────────┘     └──────────────┘     └──────────────────┘
+                         │                       │
+                         │                       ├──▶ Nunchaku INT4 Weights
+                         │                       └──▶ Z-Image Turbo Model
 ```
 
-### Docker Compose Overrides
+1. **Request** arrives at FastAPI on port 8006
+2. **Authentication** is verified via API key
+3. **Proxy** forwards request to SGLang backend (internal port 30010)
+4. **SGLang** generates image using Z-Image Turbo + Nunchaku INT4
+5. **Response** is returned to client (URL or base64)
 
-For local development, create `compose.override.yaml`:
+### Components
 
-```yaml
-services:
-  zimage-turbo:
-    environment:
-      - LOG_LEVEL=DEBUG
-```
+- **`verify_api_key`** — Dependency for authentication
+- **`metrics_middleware`** — Prometheus metrics collection
+- **`proxy_request()`** — Generic request forwarder to SGLang backend
 
 ## Tuning for RTX 3090
 
@@ -259,31 +266,26 @@ ZIMAGE_RANK: "128"
 
 Use `r256` only if you care more about quality than latency. The Nunchaku model card describes `r32` as fastest, `r128` as better quality but slower, and `r256` as highest quality but slowest.
 
-## Architecture
+## Configuration
 
-### Request Flow
+### Environment Variables
 
-```
-┌──────────┐     ┌──────────────┐     ┌──────────────────┐
-│  Client  │────▶│  FastAPI     │────▶│  SGLang Backend  │
-│          │     │  (Proxy)     │     │  (sglang serve)  │
-└──────────┘     └──────────────┘     └──────────────────┘
-                         │                       │
-                         │                       ├──▶ Nunchaku INT4 Weights
-                         │                       └──▶ Z-Image Turbo Model
+All configuration is managed via environment variables. Copy `.env.example` to `.env` and customize:
+
+```bash
+cp .env.example .env
 ```
 
-1. **Request** arrives at `/v1/images/generations`
-2. **Authentication** is verified via API key
-3. **Proxy** forwards request to SGLang backend
-4. **SGLang** generates image using Z-Image Turbo + Nunchaku INT4
-5. **Response** is returned to client (URL or base64)
+### Docker Compose Overrides
 
-### Components
+For local development, create `compose.override.yaml`:
 
-- **`verify_api_key`** — Dependency for authentication
-- **`metrics_middleware`** — Prometheus metrics collection
-- **`proxy_request()`** — Generic request forwarder to SGLang backend
+```yaml
+services:
+  zimage-turbo:
+    environment:
+      - LOG_LEVEL=DEBUG
+```
 
 ## Troubleshooting
 
@@ -292,7 +294,7 @@ Use `r256` only if you care more about quality than latency. The Nunchaku model 
 1. **Missing HF_TOKEN**: You must provide a valid HuggingFace token to download Z-Image Turbo weights
 2. **CUDA errors**: Verify NVIDIA Container Toolkit is installed and the GPU is accessible
 3. **Nunchaku install fails**: Check container's PyTorch/CUDA versions match Nunchaku requirements (CUDA ≥ 12.2)
-4. **Port conflict**: Ensure port 30010 is available
+4. **Port conflict**: Ensure port 8006 is available for FastAPI
 
 ### Debug Mode
 

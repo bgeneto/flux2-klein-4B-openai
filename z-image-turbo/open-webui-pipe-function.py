@@ -35,7 +35,7 @@ class Pipe:
         """Runtime configuration for the configured image endpoint."""
 
         IMAGE_API_URL: str = Field(
-            default="http://localhost:30010/v1/images/generations",
+            default="http://localhost:8006/v1/images/generations",
             description="OpenAI-compatible image generation endpoint.",
         )
         IMAGE_API_KEY: str = Field(
@@ -83,7 +83,7 @@ class Pipe:
         self.name = "Z-Image Turbo: "
         self.valves = self.Valves(
             IMAGE_API_URL=os.getenv(
-                "IMAGE_API_URL", "http://localhost:30010/v1/images/generations"
+                "IMAGE_API_URL", "http://localhost:8006/v1/images/generations"
             ),
             IMAGE_API_KEY=os.getenv("IMAGE_API_KEY", ""),
             MODEL_ID=os.getenv("MODEL_ID", "z-image-turbo"),
