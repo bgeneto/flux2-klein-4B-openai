@@ -24,8 +24,7 @@ RUN python3 -m pip install --upgrade pip uv huggingface_hub hf_transfer --break-
       uv pip install --system --break-system-packages "sglang[diffusion]" --prerelease=allow; \
     fi && \
     python3 -m pip install nunchaku --break-system-packages && \
-    python3 -m pip install --break-system-packages fastapi uvicorn pydantic pydantic-settings httpx prometheus-client && \
-    python3 -m pip cache purge
+    python3 -m pip install --break-system-packages fastapi uvicorn pydantic pydantic-settings httpx prometheus-client
 
 WORKDIR /app
 
