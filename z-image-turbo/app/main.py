@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     model_id: str = "z-image-turbo"
 
     model_path: Path = Path("/models/z_image_turbo-Q4_1.gguf")
-    vae_path: Optional[Path] = Path("/models/z-image-vae.safetensors")
+    vae_path: Optional[Path] = Path("/models/ae.safetensors")
     taesd_path: Optional[Path] = None
     llm_path: Path = Path("/models/Qwen3-4B-UD-Q4_K_XL.gguf")
 
@@ -56,17 +56,17 @@ class Settings(BaseSettings):
     job_timeout_seconds: int = 1800
     retention_hours: int = 72
 
-    default_steps: int = 8
+    default_steps: int = 9
     default_cfg_scale: float = 1.0
     default_sampler: str = "euler"
-    default_scheduler: Optional[str] = "smoothstep"
-    default_flow_shift: Optional[float] = 3.0
-    default_rng: str = "cuda"
+    default_scheduler: Optional[str] = "simple"
+    default_flow_shift: Optional[float] = None
+    default_rng: str = "cpu"
     default_guidance: Optional[float] = None
     default_threads: int = 0
 
     enable_offload_to_cpu: bool = True
-    enable_diffusion_fa: bool = True
+    enable_diffusion_fa: bool = False
     enable_vae_conv_direct: bool = False
     enable_vae_tiling: bool = False
     enable_clip_on_cpu: bool = False

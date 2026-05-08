@@ -9,15 +9,15 @@ This folder is a self-contained Z-Image Turbo copy of the parent project. The
 defaults follow [How to Use Z-Image on a GPU with Only 4GB VRAM.md](How%20to%20Use%20Z%E2%80%90Image%20on%20a%20GPU%20with%20Only%204GB%20VRAM.md):
 
 - diffusion model: `z_image_turbo-Q4_1.gguf`
-- VAE: `z-image-vae.safetensors`
+- VAE / autoencoder: `ae.safetensors`
 - LLM/text encoder: `Qwen3-4B-UD-Q4_K_XL.gguf`
-- sampling steps: `8`
+- sampling steps: `9`
 - CFG scale: `1.0`
-- sampler/scheduler: `euler` + `smoothstep`
-- flow shift: `3.0`
-- low-VRAM flags enabled by default: `--offload-to-cpu` and `--diffusion-fa`
+- sampler/scheduler: `euler` + `simple`
+- RNG: `cpu`
+- low-VRAM flag enabled by default: `--offload-to-cpu`
 - optional low-VRAM flags exposed through env vars: `--vae-conv-direct`,
-  `--vae-tiling`, and `--clip-on-cpu`
+  `--vae-tiling`, `--clip-on-cpu`, and `--diffusion-fa`
 
 ## Features
 
@@ -65,7 +65,7 @@ Place the model files in `models/`:
 
 ```text
 models/z_image_turbo-Q4_1.gguf
-models/z-image-vae.safetensors
+models/ae.safetensors
 models/Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
@@ -74,15 +74,17 @@ are:
 
 | File | Use | Source |
 |---|---|---|
-| `z-image-vae.safetensors` | Official Z-Image Turbo VAE passed to `sd-server --vae`. Download it from the Z-Image Turbo repo's `vae/diffusion_pytorch_model.safetensors` and save it under this clearer local filename. | <https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/vae/diffusion_pytorch_model.safetensors> |
+| `ae.safetensors` | Autoencoder/VAE passed to `sd-server --vae`. This is the file used by the PR #1020 `ae.sft` / `ae.safetensors` examples and by ComfyUI Z-Image Turbo workflows. | <https://huggingface.co/black-forest-labs/FLUX.1-schnell/blob/main/ae.safetensors> |
 | `Qwen3-4B-UD-Q4_K_XL.gguf` | Qwen3 4B text encoder / LLM passed to `sd-server --llm`. This is the Qwen3 4B GGUF variant used by known-working Z-Image Turbo stable-diffusion.cpp setups. | <https://huggingface.co/unsloth/Qwen3-4B-GGUF/blob/main/Qwen3-4B-UD-Q4_K_XL.gguf> |
 
-About the VAE: ComfyUI guides often say `ae.safetensors` is "same as Flux.1",
-but the official Z-Image Turbo repository also publishes its own VAE file at
-`vae/diffusion_pytorch_model.safetensors`. When debugging all-white outputs,
-prefer the official Z-Image file first and point `VAE_PATH` at it. Do not use
-`ae-f16.gguf` while debugging white images; that is a GGUF conversion from a
-different repository.
+About VAE vs AE: `--vae` is the stable-diffusion.cpp command-line option, but
+the file it loads for Flux/Z-Image models is often named `ae.safetensors` or
+`ae.sft` because it is the autoencoder. For this stable-diffusion.cpp project,
+use `ae.safetensors` as the baseline. The official Z-Image Turbo Diffusers repo
+also contains `vae/diffusion_pytorch_model.safetensors` (168 MB), and some
+people can run it, but the PR #1020 known-good commands and ComfyUI Z-Image
+Turbo workflows use `ae.safetensors` / `ae.sft`. Do not use `ae-f16.gguf` while
+debugging white images; that is a GGUF conversion and adds another variable.
 
 Optional lower-memory LLM alternative:
 
@@ -98,9 +100,10 @@ cd z-image-turbo/models
 # You already have this file. Put it here with exactly this name:
 # z_image_turbo-Q4_1.gguf
 
-# Official Z-Image Turbo VAE.
-curl -L -o z-image-vae.safetensors \
-  "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/resolve/main/vae/diffusion_pytorch_model.safetensors?download=true"
+# VAE / autoencoder used by stable-diffusion.cpp and ComfyUI Z-Image examples.
+# The FLUX.1-schnell repository is gated, so accept its Hugging Face terms first.
+curl -L -o ae.safetensors \
+  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors?download=true"
 
 # Qwen3 4B LLM/text encoder.
 curl -L -o Qwen3-4B-UD-Q4_K_XL.gguf \
@@ -113,7 +116,7 @@ assets:
 ```text
 models/
 ├── z_image_turbo-Q4_1.gguf
-├── z-image-vae.safetensors
+├── ae.safetensors
 └── Qwen3-4B-UD-Q4_K_XL.gguf
 ```
 
@@ -132,7 +135,7 @@ The API is published on `http://localhost:8006` by default.
 | `API_KEY` | Bearer token. Set empty to disable auth. | `sk-local` |
 | `MODEL_ID` | OpenAI-compatible model id. | `z-image-turbo` |
 | `MODEL_PATH` | Z-Image Turbo diffusion GGUF path. | `/models/z_image_turbo-Q4_1.gguf` |
-| `VAE_PATH` | VAE path passed to `--vae`. | `/models/z-image-vae.safetensors` |
+| `VAE_PATH` | VAE/autoencoder path passed to `--vae`. | `/models/ae.safetensors` |
 | `TAESD_PATH` | Optional decoder passed to `--taesd` when `VAE_PATH` is empty. | empty |
 | `LLM_PATH` | Qwen3-4B GGUF path passed to `--llm`. | `/models/Qwen3-4B-UD-Q4_K_XL.gguf` |
 | `OUTPUT_DIR` | Generated image directory. | `/data/outputs` |
@@ -142,14 +145,14 @@ The API is published on `http://localhost:8006` by default.
 | `MAX_CONCURRENT_JOBS` | Wrapper-side generation concurrency. | `1` |
 | `QUEUE_MAXSIZE` | Max queued jobs. | `16` |
 | `JOB_TIMEOUT_SECONDS` | Per-job timeout. | `180` |
-| `DEFAULT_STEPS` | Default sampling steps. Z-Image Turbo is distilled for 8 NFE / steps. | `8` |
+| `DEFAULT_STEPS` | Default sampling steps. Matches leejet's fixed PR #1020 command. | `9` |
 | `DEFAULT_CFG_SCALE` | Default CFG scale. | `1.0` |
 | `DEFAULT_SAMPLER` | Default sampler. | `euler` |
-| `DEFAULT_SCHEDULER` | Default scheduler passed to `--scheduler`. `smoothstep` is commonly used with Z-Image in stable-diffusion.cpp. | `smoothstep` |
-| `DEFAULT_FLOW_SHIFT` | Flow shift passed to `--flow-shift`. Z-Image discussions note a default of `3.0`. | `3.0` |
-| `DEFAULT_RNG` | Random number generator. | `cuda` |
+| `DEFAULT_SCHEDULER` | Default scheduler passed to `--scheduler`. `simple` matches leejet's fixed PR #1020 command. | `simple` |
+| `DEFAULT_FLOW_SHIFT` | Optional flow shift passed to `--flow-shift`. Leave empty for the PR #1020 baseline. | empty |
+| `DEFAULT_RNG` | Random number generator. `cpu` matches leejet's fixed PR #1020 command and avoids CUDA RNG variance while debugging. | `cpu` |
 | `ENABLE_OFFLOAD_TO_CPU` | Adds `--offload-to-cpu`. Recommended for 4GB VRAM. | `true` |
-| `ENABLE_DIFFUSION_FA` | Adds `--diffusion-fa`. Recommended for 4GB VRAM. | `true` |
+| `ENABLE_DIFFUSION_FA` | Adds `--diffusion-fa`. Keep disabled for the first known-good baseline; re-enable after image output is correct. | `false` |
 | `ENABLE_VAE_CONV_DIRECT` | Adds `--vae-conv-direct`. | `false` |
 | `ENABLE_VAE_TILING` | Adds `--vae-tiling`. | `false` |
 | `ENABLE_CLIP_ON_CPU` | Adds `--clip-on-cpu`. | `false` |
@@ -163,20 +166,20 @@ described in the Z-Image 4GB VRAM note.
 
 ### Recommended Z-Image Turbo Defaults
 
-Use `DEFAULT_STEPS=8` for normal use. Z-Image Turbo is the distilled variant of
-Z-Image and is designed around 8 function evaluations / sampling steps. Four
-steps may run faster, but it is below the model's intended operating point and
-can reduce prompt adherence, text rendering, and fine detail.
+Use `DEFAULT_STEPS=9`, `DEFAULT_SCHEDULER=simple`, and `DEFAULT_RNG=cpu` while
+debugging. This matches leejet's fixed PR #1020 command after the Qwen3 rope and
+K-quant NaN fixes landed. Z-Image Turbo can run at 8 steps, and other users show
+good results at 4-8 steps with other schedulers, but this project now starts
+from the clearest upstream known-good baseline.
 
 Keep `DEFAULT_CFG_SCALE=1.0` for this stable-diffusion.cpp setup. The leejet
 GGUF example uses `--cfg-scale 1.0`; higher CFG is usually not needed for the
 Turbo model and may hurt image quality. If you experiment, change one setting at
 a time and compare fixed-seed outputs.
 
-For stable-diffusion.cpp specifically, this project also sets
-`DEFAULT_SCHEDULER=smoothstep` and `DEFAULT_FLOW_SHIFT=3.0`. Those values match
-working Z-Image settings discussed by stable-diffusion.cpp users and avoid
-falling back to generic diffusion defaults.
+Leave `DEFAULT_FLOW_SHIFT=` empty for the baseline. The working PR commands do
+not include `--flow-shift`, so this wrapper should not add it unless you are
+running an explicit experiment.
 
 ### Sampler And Negative Prompts
 
@@ -184,12 +187,14 @@ falling back to generic diffusion defaults.
 fast, stable, and appears in working stable-diffusion.cpp Z-Image examples.
 Other samplers can work:
 
-- `euler` with `smoothstep` is the safest first choice.
+- `euler` with `simple` is the safest first choice because it matches leejet's
+  fixed command in PR #1020.
 - `heun` and `dpm2` can produce good results, but stable-diffusion.cpp users
   report that they are slower and often need fewer steps, for example 4-5 steps
   instead of 7-9 Euler steps.
-- If you change sampler, keep `DEFAULT_SCHEDULER=smoothstep`,
-  `DEFAULT_FLOW_SHIFT=3.0`, `DEFAULT_CFG_SCALE=1.0`, and a fixed seed while
+- `smoothstep` and `sgm_uniform` also appear in successful community tests, but
+  switch to them only after the baseline produces non-white images.
+- If you change sampler, keep `DEFAULT_CFG_SCALE=1.0`, `DEFAULT_RNG=cpu`, and a fixed seed while
   comparing.
 
 Negative prompts are not recommended for normal Z-Image Turbo use. The official
@@ -207,17 +212,31 @@ a clean product photo on a white table, no text, no watermark, no logo
 
 If generation succeeds but the PNG is completely white, check these first:
 
-1. Confirm the files are real model files, not failed downloads:
+1. Rebuild stable-diffusion.cpp without Docker cache.
+
+   PR #1020 includes fixes for Qwen3 naming/rope and NaNs with CUDA K-quants.
+   Because this Dockerfile clones `stable-diffusion.cpp` inside a cached build
+   layer, `docker compose up --build` can keep an older broken binary. Force a
+   clean rebuild before chasing model files:
+
+   ```bash
+   cd z-image-turbo
+   docker compose build --no-cache z-image-api
+   docker compose up --force-recreate
+   ```
+
+2. Confirm the files are real model files, not failed downloads:
 
    ```bash
    ls -lh models
-   file models/z-image-vae.safetensors models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_1.gguf
+   file models/ae.safetensors models/Qwen3-4B-UD-Q4_K_XL.gguf models/z_image_turbo-Q4_1.gguf
    ```
 
-   `z-image-vae.safetensors` should be a large binary file, not a small HTML,
-   JSON, or text file.
+   `ae.safetensors` should be a large binary file, not a small HTML, JSON, or
+   text file. The Black Forest Labs repository is gated; a failed unauthenticated
+   download can save an error page under the requested filename.
 
-2. Prefer one of the quantizations recommended by the stable-diffusion.cpp
+3. Prefer one of the quantizations recommended by the stable-diffusion.cpp
    Z-Image 4GB VRAM wiki if your `z_image_turbo-Q4_1.gguf` keeps producing
    white images:
 
@@ -230,37 +249,39 @@ If generation succeeds but the PNG is completely white, check these first:
    comparison table and may work for some users, but it is not the listed 4GB
    recommendation.
 
-3. Try disabling Flash Attention if your GPU/driver/backend has a kernel issue:
+4. Keep Flash Attention disabled until the baseline works:
 
    ```bash
    ENABLE_DIFFUSION_FA=false docker compose up --force-recreate
    ```
 
-4. Keep Z-Image-specific sampling defaults while testing:
+5. Keep Z-Image-specific sampling defaults while testing:
 
    ```text
-   DEFAULT_STEPS=8
+   DEFAULT_STEPS=9
    DEFAULT_CFG_SCALE=1.0
    DEFAULT_SAMPLER=euler
-   DEFAULT_SCHEDULER=smoothstep
-   DEFAULT_FLOW_SHIFT=3.0
+   DEFAULT_SCHEDULER=simple
+   DEFAULT_FLOW_SHIFT=
+   DEFAULT_RNG=cpu
+   ENABLE_OFFLOAD_TO_CPU=true
+   ENABLE_DIFFUSION_FA=false
    ```
 
-5. Test the backend directly with `sd-cli` inside the container so you can
+6. Test the backend directly with `sd-cli` inside the container so you can
    separate stable-diffusion.cpp/model issues from the FastAPI wrapper:
 
    ```bash
    docker compose run --rm z-image-api sd-cli \
      --diffusion-model /models/z_image_turbo-Q4_1.gguf \
-     --vae /models/z-image-vae.safetensors \
+     --vae /models/ae.safetensors \
      --llm /models/Qwen3-4B-UD-Q4_K_XL.gguf \
-     --steps 8 \
+     --steps 9 \
      --cfg-scale 1.0 \
      --sampling-method euler \
-     --scheduler smoothstep \
-     --flow-shift 3.0 \
+     --scheduler simple \
+     --rng cpu \
      --offload-to-cpu \
-     --diffusion-fa \
      -H 1024 \
      -W 1024 \
      -p "a detailed photo of a red apple on a wooden table" \
@@ -289,7 +310,7 @@ curl -X POST http://localhost:8006/v1/images/generations \
     "model": "z-image-turbo",
     "prompt": "A cinematic rainy neon metropolis at night",
     "size": "512x1024",
-    "steps": 8,
+    "steps": 9,
     "cfg_scale": 1.0,
     "n": 1
   }'

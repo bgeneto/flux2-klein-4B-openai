@@ -57,7 +57,7 @@ class Pipe:
             description="Number of images to request.",
         )
         STEPS: int = Field(
-            default=8,
+            default=9,
             ge=1,
             le=100,
             description="Default number of sampling steps.",
@@ -95,7 +95,7 @@ class Pipe:
             MODEL_ID=os.getenv("MODEL_ID", "z-image-turbo"),
             IMAGE_SIZE=os.getenv("IMAGE_SIZE", "1024x1024"),
             NUM_IMAGES=os.getenv("NUM_IMAGES", 1),
-            STEPS=os.getenv("STEPS", 8),
+            STEPS=os.getenv("STEPS", 9),
             CFG_SCALE=os.getenv("CFG_SCALE", 1.0),
             RESPONSE_FORMAT=os.getenv("RESPONSE_FORMAT", "b64_json"),
             SAMPLING_METHOD=os.getenv("SAMPLING_METHOD", ""),
